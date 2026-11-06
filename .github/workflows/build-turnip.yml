@@ -1,0 +1,160 @@
+name: Build Turnip Adreno 8xx & 8s Gen 4 Drivers
+
+on:
+  workflow_dispatch:
+    inputs:
+      mesa_ref:
+        description: "Mesa Git ref (branch or commit SHA)"
+        required: false
+        default: "main"
+      publish_release:
+        description: "Create a GitHub Release with compiled AdrenoTools .zip drivers"
+        type: boolean
+        required: false
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-stack:
+    name: Verify 4-Layer Patch Stack & GMEM Math
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run deterministic patch & GMEM verifier
+        run: python3 scripts/verify_patch_stack.py
+
+  build-variants:
+    name: Build Turnip (${{ matrix.package_name }})
+    needs: verify-stack
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: sustained
+            suffix: "-b"
+            package_name: "Turnip-A8xx-8sGen4-Sustained"
+            description: "Balanced & Sustained for Snapdragon 8s Gen 4 (Adreno 825) & Adreno 8xx (880 KB GMEM, UBWC, SP Hysteresis)"
+          - variant: biggmem
+            suffix: "-e"
+            package_name: "Turnip-A8xx-8sGen4-BigGMEM"
+            description: "Extended 928 KB GMEM for Switch Emulation (Eden/Citron/Sudachi) on Adreno 825 & Adreno 8xx"
+          - variant: maxperf
+            suffix: "-p"
+            package_name: "Turnip-A8xx-8sGen4-MaxPerf"
+            description: "Max Peak Throughput for Winlator/GameHub DX12/VK on Adreno 825 & Adreno 8xx (Active Cooling Recommended)"
+
+    steps:
+      - name: Checkout patch repository
+        uses: actions/checkout@v4
+        with:
+          path: patch-repo
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential python3-pip python3-mako python3-yaml \
+            meson ninja-build pkg-config flex bison glslang-tools \
+            zip unzip curl git patchelf
+
+      - name: Download & extract Android NDK r29
+        run: |
+          NDK_ZIP="android-ndk-r29-linux.zip"
+          curl -fsSL "https://dl.google.com/android/repository/${NDK_ZIP}" -o "${NDK_ZIP}"
+          unzip -q "${NDK_ZIP}" -d "$HOME"
+          rm -f "${NDK_ZIP}"
+          echo "NDK_ROOT=$HOME/android-ndk-r29" >> "$GITHUB_ENV"
+
+      - name: Clone Mesa 26.2-devel
+        run: |
+          MESA_REF="${{ github.event.inputs.mesa_ref || 'main' }}"
+          git clone --depth=500 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
+          cd mesa-src
+          if [ "$MESA_REF" != "main" ]; then
+            git fetch --depth=500 origin "$MESA_REF"
+            git checkout "$MESA_REF"
+          fi
+          echo "MESA_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Apply 4-Layer Turnip A8xx Patch Stack (${{ matrix.variant }})
+        run: |
+          python3 patch-repo/scripts/apply_all_patches.py \
+            --mesa-dir mesa-src \
+            --variant "${{ matrix.variant }}"
+
+      - name: Generate Meson Android cross-file & compile Turnip
+        run: |
+          TOOLCHAIN="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          API_LEVEL="34"
+          cat <<EOF > android-aarch64.txt
+          [binaries]
+          ar = '${TOOLCHAIN}/llvm-ar'
+          c = ['ccache', '${TOOLCHAIN}/aarch64-linux-android${API_LEVEL}-clang']
+          cpp = ['ccache', '${TOOLCHAIN}/aarch64-linux-android${API_LEVEL}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables']
+          c_ld = 'lld'
+          cpp_ld = 'lld'
+          strip = '${TOOLCHAIN}/llvm-strip'
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8'
+          endian = 'little'
+          EOF
+
+          sudo apt-get install -y ccache
+          meson setup mesa-build mesa-src \
+            --cross-file android-aarch64.txt \
+            -Dbuildtype=release \
+            -Db_lto=true \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=${API_LEVEL} \
+            -Dandroid-stub=true \
+            -Dgallium-drivers= \
+            -Dvulkan-drivers=freedreno \
+            -Dfreedreno-kmds=kgsl \
+            -Dstrip=true
+
+          ninja -C mesa-build src/freedreno/vulkan/libvulkan_freedreno.so
+
+      - name: Package AdrenoTools .zip (${{ matrix.package_name }})
+        run: |
+          VERSION=$(cat patch-repo/VERSION | tr -d '[:space:]')
+          PKG_DIR="pkg-${{ matrix.variant }}"
+          mkdir -p "${PKG_DIR}"
+          cp mesa-build/src/freedreno/vulkan/libvulkan_freedreno.so "${PKG_DIR}/vulkan.adreno.so"
+          patchelf --set-soname vulkan.adreno.so "${PKG_DIR}/vulkan.adreno.so"
+          cp patch-repo/LICENSE patch-repo/NOTICE patch-repo/THIRD_PARTY_LICENSES.md "${PKG_DIR}/"
+
+          cat <<EOF > "${PKG_DIR}/meta.json"
+          {
+            "schemaVersion": 1,
+            "name": "${{ matrix.package_name }} v${VERSION} (${MESA_SHORT_SHA})",
+            "description": "${{ matrix.description }}",
+            "author": "Nepo / Turnip A8xx Hybrid Stack",
+            "packageVersion": "${VERSION}${{ matrix.suffix }}",
+            "vendor": "Mesa / Freedreno Turnip",
+            "driverVersion": "Mesa 26.2.0-devel (${MESA_SHORT_SHA})",
+            "minApi": 31,
+            "libraryName": "vulkan.adreno.so"
+          }
+          EOF
+
+          ZIP_NAME="${{ matrix.package_name }}-v${VERSION}-${MESA_SHORT_SHA}.zip"
+          (cd "${PKG_DIR}" && zip -9 "../${ZIP_NAME}" vulkan.adreno.so meta.json LICENSE NOTICE THIRD_PARTY_LICENSES.md)
+          ls -lh "${ZIP_NAME}"
+
+      - name: Upload AdrenoTools .zip Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package_name }}
+          path: "${{ matrix.package_name }}-*.zip"
+          retention-days: 30

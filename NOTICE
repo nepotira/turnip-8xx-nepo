@@ -1,0 +1,6 @@
+Turnip Adreno 8xx & Snapdragon 8s Gen 4 (Adreno 825) Hybrid Patch Stack
+Copyright (c) 2026 Nepo (nepotira) and contributors
+
+Este projeto aplica patches sobre o código-fonte do Mesa 3D (Freedreno / Turnip Vulkan driver)
+e incorpora correções de engenharia reversa de código aberto listadas em THIRD_PARTY_LICENSES.md.
+Não é afiliado à Qualcomm Technologies, Inc. nem à Khronos Group.

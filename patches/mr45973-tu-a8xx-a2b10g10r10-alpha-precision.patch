@@ -1,0 +1,1264 @@
+From 5d2a9e1a89461c1b42f60979be07464e7f0ccdae Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Thu, 5 Nov 2026 13:56:48 +0100
+Subject: [PATCH 1/3] tu: Parse driconf per physical device and pass kernel
+ driver + device
+
+Move the options to tu_physical_device, like RADV and ANV, and pass:
+- kernelDriverName: "kgsl", "msm" or "virtio", for kernel_driver;
+- deviceVersion: the GPU generation, for device_version_regexp;
+- deviceName: the low 32 bits of the chip_id without the fuse id, like
+  "0x44050a31", for device.
+
+Add TU_DRIRC(dev, option) to improve readability.
+
+Assisted-by: LLM
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+---
+ src/freedreno/vulkan/tu_autotune.cc   |  4 +-
+ src/freedreno/vulkan/tu_cmd_buffer.cc | 10 +--
+ src/freedreno/vulkan/tu_device.cc     | 98 +++++++++++++++------------
+ src/freedreno/vulkan/tu_device.h      | 21 +++++-
+ src/freedreno/vulkan/tu_lrz.cc        |  6 +-
+ src/freedreno/vulkan/tu_pass.cc       |  2 +-
+ src/freedreno/vulkan/tu_pipeline.cc   | 10 +--
+ src/freedreno/vulkan/tu_queue.cc      |  2 +-
+ src/freedreno/vulkan/tu_sampler.cc    |  2 +-
+ src/freedreno/vulkan/tu_wsi.cc        |  2 +-
+ 10 files changed, 94 insertions(+), 63 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_autotune.cc b/src/freedreno/vulkan/tu_autotune.cc
+index c7551c164343..1b9a3a283ab4 100644
+--- a/src/freedreno/vulkan/tu_autotune.cc
++++ b/src/freedreno/vulkan/tu_autotune.cc
+@@ -279,8 +279,8 @@ tu_autotune::get_env_config()
+ 
+       if (algo_str)
+          algo_strv = algo_str;
+-      else if (device->instance->drirc.perf.autotune_algo)
+-         algo_strv = device->instance->drirc.perf.autotune_algo;
++      else if (TU_DRIRC(device, perf.autotune_algo))
++         algo_strv = TU_DRIRC(device, perf.autotune_algo);
+ 
+       if (!algo_strv.empty()) {
+          if (algo_strv == "bandwidth") {
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index b347a33b76de..07335119b0ff 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -557,7 +557,7 @@ tu_emit_cache_flush(struct tu_cmd_buffer *cmd_buffer)
+ 
+    if ((flushes & TU_CMD_FLAG_WAIT_FOR_BR) && CHIP >= A7XX &&
+        !(cmd_buffer->state.pass && cmd_buffer->state.renderpass_cb_disabled) &&
+-       cmd_buffer->device->instance->drirc.perf.allow_concurrent_binning) {
++       TU_DRIRC(cmd_buffer->device, perf.allow_concurrent_binning)) {
+       trace_start_concurrent_binning_barrier(&cmd_buffer->trace, cs, cmd_buffer);
+ 
+       /* Wait-for-BR when repeated a lot of times per frame can add up
+@@ -2224,7 +2224,7 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
+             break;
+          case REG_A7XX_SP_CHICKEN_BITS_2:
+             if (phys_dev->info->props.has_independent_icache_miss &&
+-                dev->instance->drirc.perf.independent_icache_miss)
++                TU_DRIRC(dev, perf.independent_icache_miss))
+                value |= A7XX_SP_CHICKEN_BITS_2_INDEPENDENT_ICACHE_MISS;
+             break;
+       }
+@@ -2299,7 +2299,7 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
+    }
+ 
+    tu_cs_emit_regs(cs, TPL1_MODE_CNTL(CHIP, .isammode = ISAMMODE_GL,
+-                                            .texcoordroundmode = dev->instance->drirc.misc.use_tex_coord_round_nearest_even_mode
++                                            .texcoordroundmode = TU_DRIRC(dev, misc.use_tex_coord_round_nearest_even_mode)
+                                                ? COORD_ROUND_NEAREST_EVEN
+                                                : COORD_TRUNCATE,
+                                             .nearestmipsnap = CLAMP_ROUND_TRUNCATE,
+@@ -3222,7 +3222,7 @@ tu7_emit_concurrent_binning_start(struct tu_cmd_buffer *cmd,
+           cmd->state.lrz.image_view &&
+           !fdl6_lrz_fc_fully_covered(&cmd->state.lrz.image_view->image->lrz_layout),
+           cmd, "partial LRZ fast clear") ||
+-       tu7_cb_disable_reason(!cmd->device->instance->drirc.perf.allow_concurrent_binning, cmd,
++       tu7_cb_disable_reason(!TU_DRIRC(cmd->device, perf.allow_concurrent_binning), cmd,
+                              "globally disabled")) {
+      tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+      tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+@@ -3671,7 +3671,7 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
+                                        ? LRZ_FEEDBACK_EARLY_Z_LATE_Z
+                                        : LRZ_FEEDBACK_NONE,
+                                  .cons_vis_in_binning = pass->has_fdm &&
+-                                    !cmd->device->instance->drirc.misc.disable_conservative_fdm_binning,
++                                    !TU_DRIRC(cmd->device, misc.disable_conservative_fdm_binning),
+                               });
+ 
+       tu6_emit_render_cntl<CHIP>(cmd, cmd->state.subpass, cs, true);
+diff --git a/src/freedreno/vulkan/tu_device.cc b/src/freedreno/vulkan/tu_device.cc
+index 645c3017e4cd..5b622ae2150e 100644
+--- a/src/freedreno/vulkan/tu_device.cc
++++ b/src/freedreno/vulkan/tu_device.cc
+@@ -74,6 +74,39 @@ tu_device_get_build_id(blake3_hasher *ctx)
+ #endif
+ }
+ 
++/* Driconf <device> matches the kernel with kernel_driver="kgsl|msm|virtio",
++ * the GPU generation with device_version_regexp="^8$", and the GPU with
++ * device="0x44050a31", the low 32 bits of the chip_id without the fuse id.
++ */
++static void
++tu_init_dri_options(struct tu_physical_device *device)
++{
++   struct tu_instance *instance = device->instance;
++
++   char chip_id[11];
++   snprintf(chip_id, sizeof(chip_id), "0x%08x",
++            (uint32_t) device->dev_id.chip_id);
++
++   driConfigFileParseParams params = {
++      .driverName = "turnip",
++      .kernelDriverName = instance->knl->name,
++      .deviceName = chip_id,
++      .deviceVersion = fd_dev_gen(&device->dev_id),
++      .applicationName = instance->vk.app_info.app_name,
++      .applicationVersion = instance->vk.app_info.app_version,
++      .engineName = instance->vk.app_info.engine_name,
++      .engineVersion = instance->vk.app_info.engine_version,
++      .logNonDefaultOptions = TU_DEBUG(STARTUP),
++   };
++
++   turnip_parse_dri_options(&device->drirc, &params);
++
++   if (TU_DEBUG(NO_CONCURRENT_BINNING))
++      device->drirc.perf.allow_concurrent_binning = false;
++   if (TU_DEBUG(FORCE_CONCURRENT_BINNING))
++      device->drirc.perf.allow_concurrent_binning = true;
++}
++
+ static void
+ tu_physical_device_compiler_options_init(struct tu_physical_device *device,
+                                          struct tu_instance *instance)
+@@ -83,17 +116,17 @@ tu_physical_device_compiler_options_init(struct tu_physical_device *device,
+       if (device->info->props.max_texel_buffer_range_elements < TU_D3D12_MAX_TEXEL_BUFFER_ELEMENTS) {
+          assert(fd_dev_gen(&device->dev_id) == 7);
+          device->compiler_options.enable_texel_buffer_emulation =
+-            instance->drirc.misc.enable_texel_buffer_emulation;
++            TU_DRIRC(device, misc.enable_texel_buffer_emulation);
+       }
+       if (device->info->props.max_storage_buffer_range_bytes < TU_D3D12_MAX_STORAGE_BUFFER_RANGE_BYTES) {
+          assert(fd_dev_gen(&device->dev_id) == 7);
+          device->compiler_options.enable_ssbo_emulation =
+-            instance->drirc.misc.enable_ssbo_emulation;
++            TU_DRIRC(device, misc.enable_ssbo_emulation);
+       }
+    }
+ 
+    device->compiler_options.allow_oob_indirect_ubo_loads =
+-      device->instance->drirc.misc.allow_oob_indirect_ubo_loads;
++      TU_DRIRC(device, misc.allow_oob_indirect_ubo_loads);
+ 
+    /* Note: IR3_SHADER_DEBUG also affects compilation, but it's not
+     * initialized until after compiler creation so we have to add it to the
+@@ -419,7 +452,7 @@ get_device_extensions(const struct tu_physical_device *device,
+       .ARM_rasterization_order_attachment_access = true,
+       .GOOGLE_decorate_string = true,
+ #ifdef TU_USE_WSI_PLATFORM
+-      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&device->instance->vk, &device->instance->drirc.options),
++      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&device->instance->vk, &TU_DRIRC(device, options)),
+ #endif
+       .GOOGLE_hlsl_functionality1 = true,
+       .GOOGLE_user_type = true,
+@@ -1049,7 +1082,7 @@ tu_get_physical_device_properties_1_2(struct tu_physical_device *pdevice,
+     * get people confused, but vkd3d-proton cannot emulate it itself so we
+     * have to allow it to use our emulation.
+     */
+-   p->shaderDenormPreserveFloat32 = pdevice->instance->drirc.misc.enable_softfloat32;
++   p->shaderDenormPreserveFloat32 = TU_DRIRC(pdevice, misc.enable_softfloat32);
+ 
+    p->shaderRoundingModeRTEFloat32           = true;
+    p->shaderRoundingModeRTZFloat32           = false;
+@@ -1322,8 +1355,8 @@ tu_get_properties(struct tu_physical_device *pdevice,
+       ((pdevice->info->chip >= 7) ? TU_API_VERSION :
+          VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION));
+    props->driverVersion = vk_get_driver_version();
+-   props->vendorID = pdevice->instance->drirc.debug.force_vk_vendor != 0 ?
+-                     pdevice->instance->drirc.debug.force_vk_vendor : 0x5143;
++   props->vendorID = TU_DRIRC(pdevice, debug.force_vk_vendor) != 0 ?
++                     TU_DRIRC(pdevice, debug.force_vk_vendor) : 0x5143;
+    props->deviceID = pdevice->dev_id.chip_id;
+    props->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+ 
+@@ -1339,8 +1372,8 @@ tu_get_properties(struct tu_physical_device *pdevice,
+    props->sparseResidencyNonResidentStrict = true;
+ 
+    snprintf(props->deviceName, sizeof(props->deviceName), "%s",
+-            (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) ?
+-            pdevice->instance->drirc.debug.force_vk_devicename : pdevice->name);
++            (strlen(TU_DRIRC(pdevice, debug.force_vk_devicename)) > 0) ?
++            TU_DRIRC(pdevice, debug.force_vk_devicename) : pdevice->name);
+    memcpy(props->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
+ 
+    tu_get_physical_device_properties_1_1(pdevice, props);
+@@ -1516,7 +1549,7 @@ tu_get_properties(struct tu_physical_device *pdevice,
+    props->earlyFragmentMultisampleCoverageAfterSampleCounting = true;
+    props->earlyFragmentSampleMaskTestBeforeSampleCounting = true;
+    props->depthStencilSwizzleOneSupport =
+-      pdevice->info->props.has_z24uint_s8uint && pdevice->instance->drirc.misc.enable_d24s8_border_color_workaround;
++      pdevice->info->props.has_z24uint_s8uint && TU_DRIRC(pdevice, misc.enable_d24s8_border_color_workaround);
+    props->polygonModePointSize = true;
+    props->nonStrictWideLinesUseParallelogram = false;
+    props->nonStrictSinglePixelWideLinesUseParallelogram = false;
+@@ -1741,6 +1774,8 @@ tu_physical_device_init(struct tu_physical_device *device,
+                                "device name alloc fail");
+    }
+ 
++   tu_init_dri_options(device);
++
+    switch (fd_dev_gen(&device->dev_id)) {
+    case 6:
+    case 7:
+@@ -1753,7 +1788,7 @@ tu_physical_device_init(struct tu_physical_device *device,
+                                      &device->config_gmem,
+                                      &device->config_sysmem);
+ 
+-      if (!instance->drirc.misc.dont_reserve_descriptor_set) {
++      if (!TU_DRIRC(device, misc.dont_reserve_descriptor_set)) {
+          device->usable_sets = device->reserved_set_idx = device->info->props.max_sets - 1;
+       } else {
+          device->usable_sets = device->info->props.max_sets;
+@@ -1775,7 +1810,7 @@ tu_physical_device_init(struct tu_physical_device *device,
+       goto fail_free_name;
+    }
+ 
+-   device->expose_double_threadsize = info.props.supports_double_threadsize && !instance->drirc.misc.restrict_subgroup_size_64;
++   device->expose_double_threadsize = info.props.supports_double_threadsize && !TU_DRIRC(device, misc.restrict_subgroup_size_64);
+ 
+    device->level1_dcache_size = util_cache_granularity();
+    device->has_cached_non_coherent_memory =
+@@ -1795,7 +1830,7 @@ tu_physical_device_init(struct tu_physical_device *device,
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+          VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+ 
+-      if (instance->drirc.misc.override_uncached_as_cache_coherent) {
++      if (TU_DRIRC(device, misc.override_uncached_as_cache_coherent)) {
+           /* Retain this memory type index to override later. */
+           device->preferred_uncached_as_cached_index = device->memory.type_count;
+       }
+@@ -1815,7 +1850,7 @@ tu_physical_device_init(struct tu_physical_device *device,
+     * types are HOST_VISIBLE. However, certain apps may unconditionally
+     * expect us having non-HOST_VISIBLE memory.
+     */
+-   if (instance->drirc.misc.expose_device_local_only_memory_type) {
++   if (TU_DRIRC(device, misc.expose_device_local_only_memory_type)) {
+       device->memory.types[device->memory.type_count] =
+          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+       device->memory.type_count++;
+@@ -1881,7 +1916,7 @@ tu_physical_device_init(struct tu_physical_device *device,
+    }
+ 
+    device->emulate_second_queue = -1;
+-   if (instance->drirc.misc.emulate_second_queue) {
++   if (TU_DRIRC(device, misc.emulate_second_queue)) {
+       for (unsigned i = 0; i < device->num_queue_families; i++) {
+          if (device->queue_families[i].properties->queueFlags &
+              VK_QUEUE_GRAPHICS_BIT) {
+@@ -1915,6 +1950,8 @@ tu_physical_device_init(struct tu_physical_device *device,
+    return VK_SUCCESS;
+ 
+ fail_free_name:
++   driDestroyOptionCache(&device->drirc.options);
++   driDestroyOptionInfo(&device->drirc.available_options);
+    vk_free(&instance->vk.alloc, const_cast<char *>(device->name));
+    return result;
+ }
+@@ -1934,6 +1971,8 @@ tu_physical_device_finish(struct tu_physical_device *device)
+       close(device->kgsl_dma_fd);
+ 
+    disk_cache_destroy(device->vk.disk_cache);
++   driDestroyOptionCache(&device->drirc.options);
++   driDestroyOptionInfo(&device->drirc.available_options);
+    vk_free(&device->instance->vk.alloc, const_cast<char *>(device->name));
+ 
+    vk_physical_device_finish(&device->vk);
+@@ -1946,26 +1985,6 @@ tu_destroy_physical_device(struct vk_physical_device *device)
+    vk_free(&device->instance->alloc, device);
+ }
+ 
+-static void
+-tu_init_dri_options(struct tu_instance *instance)
+-{
+-   driConfigFileParseParams params = {
+-      .driverName = "turnip",
+-      .applicationName = instance->vk.app_info.app_name,
+-      .applicationVersion = instance->vk.app_info.app_version,
+-      .engineName = instance->vk.app_info.engine_name,
+-      .engineVersion = instance->vk.app_info.engine_version,
+-      .logNonDefaultOptions = TU_DEBUG(STARTUP),
+-   };
+-
+-   turnip_parse_dri_options(&instance->drirc, &params);
+-
+-   if (TU_DEBUG(NO_CONCURRENT_BINNING))
+-      instance->drirc.perf.allow_concurrent_binning = false;
+-   if (TU_DEBUG(FORCE_CONCURRENT_BINNING))
+-      instance->drirc.perf.allow_concurrent_binning = true;
+-}
+-
+ static uint32_t instance_count = 0;
+ 
+ VKAPI_ATTR VkResult VKAPI_CALL
+@@ -2015,8 +2034,6 @@ tu_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
+ 
+    VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
+ 
+-   tu_init_dri_options(instance);
+-
+    *pInstance = tu_instance_to_handle(instance);
+ 
+ #ifdef HAVE_PERFETTO
+@@ -2039,9 +2056,6 @@ tu_DestroyInstance(VkInstance _instance,
+ 
+    VG(VALGRIND_DESTROY_MEMPOOL(instance));
+ 
+-   driDestroyOptionCache(&instance->drirc.options);
+-   driDestroyOptionInfo(&instance->drirc.available_options);
+-
+    vk_instance_finish(&instance->vk);
+    vk_free(&instance->vk.alloc, instance);
+ }
+@@ -2134,7 +2148,7 @@ tu_GetPhysicalDeviceQueueFamilyProperties2(
+ uint64_t
+ tu_get_system_heap_size(struct tu_physical_device *physical_device)
+ {
+-   float *percent = &physical_device->instance->drirc.misc.heap_memory_percent;
++   float *percent = &physical_device->drirc.misc.heap_memory_percent;
+ 
+    uint64_t available_ram = os_get_gpu_heap_size(*percent, percent);
+    assert(available_ram);
+@@ -3243,7 +3257,7 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
+    device->use_z24uint_s8uint =
+       physical_device->info->props.has_z24uint_s8uint &&
+       (!border_color_without_format ||
+-       !physical_device->instance->drirc.misc.enable_d24s8_border_color_workaround);
++       !TU_DRIRC(physical_device, misc.enable_d24s8_border_color_workaround));
+    device->use_lrz = !TU_DEBUG_START(NOLRZ);
+ 
+    tu_gpu_tracepoint_config_variable();
+diff --git a/src/freedreno/vulkan/tu_device.h b/src/freedreno/vulkan/tu_device.h
+index cf48f0d1831e..e29823e25e78 100644
+--- a/src/freedreno/vulkan/tu_device.h
++++ b/src/freedreno/vulkan/tu_device.h
+@@ -95,6 +95,8 @@ struct tu_physical_device
+ 
+    struct tu_instance *instance;
+ 
++   struct turnip_drirc drirc;
++
+    const char *name;
+    uint8_t driver_uuid[VK_UUID_SIZE];
+    uint8_t device_uuid[VK_UUID_SIZE];
+@@ -207,8 +209,6 @@ struct tu_instance
+ {
+    struct vk_instance vk;
+ 
+-   struct turnip_drirc drirc;
+-
+    const struct tu_knl *knl;
+ 
+    uint32_t instance_idx;
+@@ -505,6 +505,23 @@ struct tu_device
+ };
+ VK_DEFINE_HANDLE_CASTS(tu_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
+ 
++static inline const struct turnip_drirc *
++tu_drirc(const struct tu_physical_device *pdevice)
++{
++   return &pdevice->drirc;
++}
++
++static inline const struct turnip_drirc *
++tu_drirc(const struct tu_device *device)
++{
++   return &device->physical_device->drirc;
++}
++
++/* Reads a driconf option, e.g. TU_DRIRC(device, misc.disable_conservative_lrz).
++ * Takes a tu_device or a tu_physical_device.
++ */
++#define TU_DRIRC(dev, option) (tu_drirc(dev)->option)
++
+ template <chip_range_support>
+ struct TU_TESS;
+ 
+diff --git a/src/freedreno/vulkan/tu_lrz.cc b/src/freedreno/vulkan/tu_lrz.cc
+index 1ae27c2475f3..819819427a21 100644
+--- a/src/freedreno/vulkan/tu_lrz.cc
++++ b/src/freedreno/vulkan/tu_lrz.cc
+@@ -1360,7 +1360,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
+     */
+    if (!disable_lrz_due_to_fs && fs->variant->writes_pos &&
+        !fs->variant->fs.early_fragment_tests &&
+-       !cmd->device->instance->drirc.misc.ignore_frag_depth_direction) {
++       !TU_DRIRC(cmd->device, misc.ignore_frag_depth_direction)) {
+       if (fs->variant->fs.depth_layout == FRAG_DEPTH_LAYOUT_NONE ||
+           fs->variant->fs.depth_layout == FRAG_DEPTH_LAYOUT_ANY) {
+          disable_lrz_due_to_fs = true;
+@@ -1521,7 +1521,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
+     * fragments from draw A which should be visible due to draw B.
+     */
+    if (blend_status == TU_LRZ_BLEND_READS_DEST_OR_PARTIAL_WRITE &&
+-       z_write_enable && !cmd->device->instance->drirc.misc.disable_conservative_lrz) {
++       z_write_enable && !TU_DRIRC(cmd->device, misc.disable_conservative_lrz)) {
+       tu_lrz_disable_write_for_rp(cmd, "Depth write + blending");
+    }
+ 
+@@ -1530,7 +1530,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
+     * of them, but also has color attachments.
+     */
+    if (blend_status == TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED &&
+-       z_write_enable && !cmd->device->instance->drirc.misc.disable_conservative_lrz) {
++       z_write_enable && !TU_DRIRC(cmd->device, misc.disable_conservative_lrz)) {
+       if (cmd->state.lrz.color_written_with_z_test) {
+          tu_lrz_disable_write_for_rp(cmd, "Depth write + no color writes");
+       }
+diff --git a/src/freedreno/vulkan/tu_pass.cc b/src/freedreno/vulkan/tu_pass.cc
+index 318b171cacdf..1aed0f906a90 100644
+--- a/src/freedreno/vulkan/tu_pass.cc
++++ b/src/freedreno/vulkan/tu_pass.cc
+@@ -939,7 +939,7 @@ attachment_set_ops(struct tu_device *device,
+                    VkAttachmentStoreOp store_op,
+                    VkAttachmentStoreOp stencil_store_op)
+ {
+-   if (unlikely(device->instance->drirc.debug.dont_care_as_load)) {
++   if (unlikely(TU_DRIRC(device, debug.dont_care_as_load))) {
+       if (load_op == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+          load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
+       if (stencil_load_op == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+index 5b5dbab8edc9..62dca25db924 100644
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -1789,7 +1789,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
+    for (mesa_shader_stage stage = MESA_SHADER_VERTEX;
+         stage < ARRAY_SIZE(keys); stage = static_cast<mesa_shader_stage>(stage + 1)) {
+       keys[stage].version =
+-         builder->device->instance->drirc.misc.override_graphics_shader_version;
++         TU_DRIRC(builder->device, misc.override_graphics_shader_version);
+ 
+       const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *subgroup_info = NULL;
+       if (stage_infos[stage])
+@@ -1863,7 +1863,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
+       keys[MESA_SHADER_FRAGMENT].custom_resolve =
+          builder->graphics_state.rp->custom_resolve;
+ 
+-      if (builder->device->physical_device->instance->drirc.misc.emulate_alpha_to_coverage) {
++      if (TU_DRIRC(builder->device, misc.emulate_alpha_to_coverage)) {
+          keys[MESA_SHADER_FRAGMENT].emulate_alpha_to_coverage = true;
+ 
+          /* Don't emulate if we know it won't be enabled. */
+@@ -3321,7 +3321,7 @@ tu6_emit_blend(struct tu_cs *cs,
+ {
+    bool rop_reads_dst = cb->logic_op_enable && tu_logic_op_reads_dst(static_cast<VkLogicOp>(cb->logic_op));
+    enum a3xx_rop_code rop = tu6_rop(static_cast<VkLogicOp>(cb->logic_op));
+-   if (cs->device->physical_device->instance->drirc.misc.emulate_alpha_to_coverage)
++   if (TU_DRIRC(cs->device, misc.emulate_alpha_to_coverage))
+       alpha_to_coverage_enable = false;
+ 
+    uint32_t blend_enable_mask = 0;
+@@ -3476,7 +3476,7 @@ template <chip CHIP>
+ bool
+ tu_binning_conservative_rast(struct tu_device *dev, bool fdm)
+ {
+-   return CHIP == A7XX && fdm && !dev->instance->drirc.misc.disable_conservative_fdm_binning;
++   return CHIP == A7XX && fdm && !TU_DRIRC(dev, misc.disable_conservative_fdm_binning);
+ }
+ 
+ template <chip CHIP>
+@@ -4999,7 +4999,7 @@ tu_compute_pipeline_create(VkDevice device,
+    pipeline->base.active_stages = VK_SHADER_STAGE_COMPUTE_BIT;
+ 
+    struct tu_shader_key key = { };
+-   key.version = dev->instance->drirc.misc.override_compute_shader_version;
++   key.version = TU_DRIRC(dev, misc.override_compute_shader_version);
+    bool allow_varying_subgroup_size =
+       (stage_info->flags &
+        VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT);
+diff --git a/src/freedreno/vulkan/tu_queue.cc b/src/freedreno/vulkan/tu_queue.cc
+index 225ef8b8fe19..f1eb26286538 100644
+--- a/src/freedreno/vulkan/tu_queue.cc
++++ b/src/freedreno/vulkan/tu_queue.cc
+@@ -184,7 +184,7 @@ resolve_vis_stream_patchpoints(struct tu_queue *queue,
+     * streams and therefore should be avoided.
+     */
+    uint32_t min_vis_stream_count =
+-      (!dev->instance->drirc.perf.allow_concurrent_binning || dev->physical_device->info->chip < 7) ?
++      (!TU_DRIRC(dev, perf.allow_concurrent_binning) || dev->physical_device->info->chip < 7) ?
+       1 : MIN2(MAX2(rp_count, 1), TU_MAX_VIS_STREAMS);
+    uint32_t vis_stream_count;
+ 
+diff --git a/src/freedreno/vulkan/tu_sampler.cc b/src/freedreno/vulkan/tu_sampler.cc
+index 2743773dd538..c221d967fbd3 100644
+--- a/src/freedreno/vulkan/tu_sampler.cc
++++ b/src/freedreno/vulkan/tu_sampler.cc
+@@ -84,7 +84,7 @@ tu_CreateSampler(VkDevice _device,
+          pCreateInfo->borderColor == VK_BORDER_COLOR_INT_CUSTOM_EXT);
+       border_color = border_color_index + TU_BORDER_COLOR_BUILTIN;
+    } else if (sampler->vk.format != VK_FORMAT_UNDEFINED ||
+-              device->instance->drirc.misc.enable_fast_border_color_for_undefined_formats) {
++              TU_DRIRC(device, misc.enable_fast_border_color_for_undefined_formats)) {
+       fast_border_color_enable = true;
+       switch (pCreateInfo->borderColor) {
+          case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:
+diff --git a/src/freedreno/vulkan/tu_wsi.cc b/src/freedreno/vulkan/tu_wsi.cc
+index 4db6d5e1346a..70ff7b3edb05 100644
+--- a/src/freedreno/vulkan/tu_wsi.cc
++++ b/src/freedreno/vulkan/tu_wsi.cc
+@@ -44,7 +44,7 @@ tu_wsi_init(struct tu_physical_device *physical_device)
+                             tu_wsi_proc_addr,
+                             &physical_device->instance->vk.alloc,
+                             physical_device->master_fd,
+-                            &physical_device->instance->drirc.options,
++                            &TU_DRIRC(physical_device, options),
+                             &options);
+    if (result != VK_SUCCESS)
+       return result;
+-- 
+GitLab
+
+
+From 3a050c1ed11454a42244bb2a65f82792e588514a Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Thu, 5 Nov 2026 14:33:00 +0100
+Subject: [PATCH 2/3] tu: Dirty shader consts on set bind only if shaders use
+ set base addrs
+
+Track at pipeline bind time whether the bound graphics shaders use the
+base addresses and dirty the consts only in that case. Binding a graphics
+pipeline already dirties the consts, and compute consts are emitted on
+every dispatch, so the compute bind point doesn't need it.
+
+Assisted-by: LLM
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+---
+ src/freedreno/vulkan/tu_cmd_buffer.cc | 14 ++++++++++++--
+ src/freedreno/vulkan/tu_cmd_buffer.h  |  2 ++
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index 07335119b0ff..7511216fa8e1 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -4894,7 +4894,9 @@ tu_bind_descriptor_sets(struct tu_cmd_buffer *cmd,
+       descriptors_state->set_iova[idx] = set ?
+          (set->va | BINDLESS_DESCRIPTOR_64B) : 0;
+ 
+-      if (cmd->device->physical_device->compiler_options.enable_ssbo_emulation)
++      /* Compute consts are emitted on every dispatch. */
++      if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS &&
++          cmd->state.gfx_shaders_use_bindless_base_addrs)
+          cmd->state.dirty |= TU_CMD_DIRTY_SHADER_CONSTS;
+ 
+       if (!set)
+@@ -5070,7 +5072,9 @@ tu_set_descriptor_buffer_offsets(
+           info->pOffsets[i]) |
+          BINDLESS_DESCRIPTOR_64B;
+ 
+-      if (cmd->device->physical_device->compiler_options.enable_ssbo_emulation ||
++      /* Compute consts are emitted on every dispatch. */
++      if ((bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS &&
++           cmd->state.gfx_shaders_use_bindless_base_addrs) ||
+           set_layout->has_inline_uniforms)
+          cmd->state.dirty |= TU_CMD_DIRTY_SHADER_CONSTS;
+    }
+@@ -5637,6 +5641,12 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
+    tu_bind_gs(cmd, pipeline->shaders[MESA_SHADER_GEOMETRY]);
+    tu_bind_fs(cmd, pipeline->shaders[MESA_SHADER_FRAGMENT]);
+ 
++   cmd->state.gfx_shaders_use_bindless_base_addrs = false;
++   for (unsigned i = MESA_SHADER_VERTEX; i <= MESA_SHADER_FRAGMENT; i++) {
++      if (cmd->state.shaders[i]->const_state.num_bindless_base_addresses)
++         cmd->state.gfx_shaders_use_bindless_base_addrs = true;
++   }
++
+    /* We precompile static state and count it as dynamic, so we have to
+     * manually clear bitset that tells which dynamic state is set, in order to
+     * make sure that future dynamic state will be emitted. The issue is that
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.h b/src/freedreno/vulkan/tu_cmd_buffer.h
+index 75673e88980a..5a858683d549 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.h
++++ b/src/freedreno/vulkan/tu_cmd_buffer.h
+@@ -496,6 +496,8 @@ struct tu_cmd_state
+ 
+    struct tu_shader *shaders[MESA_SHADER_STAGES];
+ 
++   bool gfx_shaders_use_bindless_base_addrs;
++
+    struct tu_program_state program;
+ 
+    struct tu_render_pass_state rp;
+-- 
+GitLab
+
+
+From 99417dd332547661e929f76476de28207993d662 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Thu, 5 Nov 2026 13:57:08 +0100
+Subject: [PATCH 3/3] tu: Workaround the 2-bit alpha precision of
+ 10_10_10_2_UNORM on A8XX KGSL
+
+KGSL does not set b20 of TPL1_DBG_ECO_CNTL and b25 of TPL1_DBG_ECO_CNTL1
+on A8XX. Without them the TP converts the 2-bit alpha of
+10_10_10_2_UNORM with fp16 precision: an alpha of 1/3 is returned as
+`fp16(1/3)` and 2/3 as `2 * fp16(1/3)`, both too low by a factor of
+`(1 - 2^-12)`. 0 and 1 are returned exactly.
+
+Games that decode a material ID for deferred rendering by reading A2
+would get a wrong result without the workaround. Patterns seen in the
+games:
+
+```
+vec4 gb = texelFetch(gbuffer, coord, 0);   // A2B10G10R10_UNORM
+bool flag = gb.a > 0.666666;
+roughness = flag ? min(other.a, 0.08) : fract(...) * 0.090667;
+```
+
+```
+vec4 gb = texelFetch(gbuffer, coord, 0);
+int id = int(gb.a * 3.0);
+```
+
+To workaround the issue without a big performance hit we:
+- When compiling shaders try to detect problematic patterns which are
+  similar enough to the above ones. Only .w channel is considered,
+  since DXVK doesn't reorder the channels, and for vkd3d-p we expect
+  game also not to do that.
+- Only when pattern is detected the code to check if image is
+  10_10_10_2_UNORM is added. If true, the `fp16(1/3)` and `2 * fp16(1/3)`
+  are converted to proper `1/3` and `2/3`.
+- fdl6_view_init() writes the mask of channels with the 2-bit alpha into
+  the unused descriptor dword 15. The shader reads it through the
+  descriptor set base addresses.
+
+I ran a number of game captures and for unrelated games either none of
+shaders are matching the pattern, or just 1 or 2 of them.
+
+Fixes on A8XX with KGSL:
+War Thunder terrain and RE3 specular misrenders.
+
+Assisted-by: LLM
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+---
+ src/freedreno/fdl/fd6_view.cc                 |  13 +
+ src/freedreno/fdl/freedreno_layout.h          |   9 +
+ src/freedreno/vulkan/00-turnip-defaults.conf  |  10 +
+ src/freedreno/vulkan/tu_device.cc             |   2 +
+ src/freedreno/vulkan/tu_device.h              |   3 +-
+ src/freedreno/vulkan/tu_drirc_gen.py          |   6 +
+ src/freedreno/vulkan/tu_image.cc              |   1 +
+ .../vulkan/tu_nir_a2_alpha_workaround.h       | 380 ++++++++++++++++++
+ src/freedreno/vulkan/tu_shader.cc             |  31 +-
+ src/freedreno/vulkan/tu_shader.h              |   7 +
+ 10 files changed, 455 insertions(+), 7 deletions(-)
+ create mode 100644 src/freedreno/vulkan/tu_nir_a2_alpha_workaround.h
+
+diff --git a/src/freedreno/fdl/fd6_view.cc b/src/freedreno/fdl/fd6_view.cc
+index 03b0d4db6359..d28501cc2d8c 100644
+--- a/src/freedreno/fdl/fd6_view.cc
++++ b/src/freedreno/fdl/fd6_view.cc
+@@ -534,6 +534,19 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
+                       fdl6_texswiz<CHIP>(args, has_z24uint_s8uint);
+    }
+ 
++   if (args->write_a2_mask && texture_format == FMT6_10_10_10_2_UNORM) {
++      unsigned char format_swiz[4], swiz[4];
++      fdl6_format_swiz(args->format, has_z24uint_s8uint, format_swiz);
++      util_format_compose_swizzles(format_swiz, args->swiz, swiz);
++      uint32_t mask = 0;
++      for (unsigned i = 0; i < 4; i++) {
++         if (swiz[i] == PIPE_SWIZZLE_W)
++            mask |= 1u << i;
++      }
++      view->descriptor[FDL6_A2_MASK_DWORD] = mask;
++      view->storage_descriptor[FDL6_A2_MASK_DWORD] = mask;
++   }
++
+    enum a6xx_format color_format =
+       fd6_color_format(args->format, (enum a6xx_tile_mode)layout->tile_mode);
+ 
+diff --git a/src/freedreno/fdl/freedreno_layout.h b/src/freedreno/fdl/freedreno_layout.h
+index da66c6fa60dd..dda701a00bc4 100644
+--- a/src/freedreno/fdl/freedreno_layout.h
++++ b/src/freedreno/fdl/freedreno_layout.h
+@@ -387,10 +387,19 @@ struct fdl_view_args {
+    uint32_t filter_center_x;
+    uint32_t filter_center_y;
+    uint32_t filter_num_phases;
++
++   /* Write the A2 channel mask into the descriptor, see FDL6_A2_MASK_DWORD. */
++   bool write_a2_mask;
+ };
+ 
+ #define FDL6_TEX_CONST_DWORDS 16
+ 
++/* Unused texture descriptor dword. With fdl_view_args::write_a2_mask, for
++ * 10_10_10_2_UNORM it holds the mask of result channels that have the 2-bit
++ * alpha, otherwise it is 0.
++ */
++#define FDL6_A2_MASK_DWORD 15
++
+ struct fdl6_view {
+    uint64_t base_addr;
+    uint64_t ubwc_addr;
+diff --git a/src/freedreno/vulkan/00-turnip-defaults.conf b/src/freedreno/vulkan/00-turnip-defaults.conf
+index da85f99413ad..596832147629 100644
+--- a/src/freedreno/vulkan/00-turnip-defaults.conf
++++ b/src/freedreno/vulkan/00-turnip-defaults.conf
+@@ -157,4 +157,14 @@
+             <option name="tu_autotune_algorithm" value="prefer_gmem" />
+         </application>
+     </device>
++    <!--
++        A8XX on KGSL does not set b20 of TPL1_DBG_ECO_CNTL and b25 of
++        TPL1_DBG_ECO_CNTL1, which lowers the precision of the 2-bit alpha of
++        A2B10G10R10_UNORM. D3D games convert it back to an integer.
++    -->
++    <device driver="turnip" kernel_driver="kgsl" device_version_regexp="^8$">
++        <engine engine_name_match="DXVK|vkd3d">
++            <option name="tu_fix_a2_alpha_precision" value="true" />
++        </engine>
++    </device>
+ </driconf>
+diff --git a/src/freedreno/vulkan/tu_device.cc b/src/freedreno/vulkan/tu_device.cc
+index 5b622ae2150e..b46d63a2c866 100644
+--- a/src/freedreno/vulkan/tu_device.cc
++++ b/src/freedreno/vulkan/tu_device.cc
+@@ -128,6 +128,8 @@ tu_physical_device_compiler_options_init(struct tu_physical_device *device,
+    device->compiler_options.allow_oob_indirect_ubo_loads =
+       TU_DRIRC(device, misc.allow_oob_indirect_ubo_loads);
+ 
++   device->compiler_options.a2_alpha_fixup = TU_DRIRC(device, misc.fix_a2_alpha_precision);
++
+    /* Note: IR3_SHADER_DEBUG also affects compilation, but it's not
+     * initialized until after compiler creation so we have to add it to the
+     * shader hash instead, since the compiler is only created with the logical
+diff --git a/src/freedreno/vulkan/tu_device.h b/src/freedreno/vulkan/tu_device.h
+index e29823e25e78..4ca17527e726 100644
+--- a/src/freedreno/vulkan/tu_device.h
++++ b/src/freedreno/vulkan/tu_device.h
+@@ -167,7 +167,8 @@ struct tu_physical_device
+       bool allow_oob_indirect_ubo_loads : 1;
+       bool no_multi_pos : 1;
+       bool compute_round_robin : 1;
+-      uint32_t padding : 27;
++      bool a2_alpha_fixup : 1;
++      uint32_t padding : 26;
+    } compiler_options;
+ 
+    struct {
+diff --git a/src/freedreno/vulkan/tu_drirc_gen.py b/src/freedreno/vulkan/tu_drirc_gen.py
+index b46cc2f06fea..b26de8ed5d2f 100644
+--- a/src/freedreno/vulkan/tu_drirc_gen.py
++++ b/src/freedreno/vulkan/tu_drirc_gen.py
+@@ -123,6 +123,12 @@ def declare_options():
+           "Emulate SSBOs to allow a higher limit for elements that is in line with what some D3D12 games expect",
+           c_name="enable_ssbo_emulation"),
+ 
++        # Workaround for A8XX on KGSL, which does not set b20 of
++        # TPL1_DBG_ECO_CNTL and b25 of TPL1_DBG_ECO_CNTL1.
++        B("tu_fix_a2_alpha_precision", False,
++          "Fix the low precision of the 2-bit alpha of A2B10G10R10_UNORM textures when the shader converts it back to an integer",
++          c_name="fix_a2_alpha_precision"),
++
+         B("tu_disable_conservative_fdm_binning", False,
+           "Don't enable conservative rasterization during binning of a renderpass with FDM, for non-identity FDM tiles may result in tiny see-through gaps in the geometry in places with dense geometry. Improves performance up to 4% on A7XX.",
+           c_name="disable_conservative_fdm_binning"),
+diff --git a/src/freedreno/vulkan/tu_image.cc b/src/freedreno/vulkan/tu_image.cc
+index 478a63b71d44..08d774aff84d 100644
+--- a/src/freedreno/vulkan/tu_image.cc
++++ b/src/freedreno/vulkan/tu_image.cc
+@@ -230,6 +230,7 @@ tu_image_view_init(struct tu_device *device,
+    args.level_count = vk_image_subresource_level_count(&image->vk, range);
+    args.min_lod_clamp = iview->vk.min_lod;
+    args.format = tu_format_for_aspect(format, aspect_mask);
++   args.write_a2_mask = device->physical_device->compiler_options.a2_alpha_fixup;
+    vk_component_mapping_to_pipe_swizzle(pCreateInfo->components, args.swiz);
+    if (conversion) {
+       unsigned char conversion_swiz[4], create_swiz[4];
+diff --git a/src/freedreno/vulkan/tu_nir_a2_alpha_workaround.h b/src/freedreno/vulkan/tu_nir_a2_alpha_workaround.h
+new file mode 100644
+index 000000000000..83ff8d5476fb
+--- /dev/null
++++ b/src/freedreno/vulkan/tu_nir_a2_alpha_workaround.h
+@@ -0,0 +1,380 @@
++/*
++ * Copyright © 2026 Igalia S.L.
++ * SPDX-License-Identifier: MIT
++ */
++
++#ifndef TU_NIR_A2_ALPHA_WORKAROUND_H
++#define TU_NIR_A2_ALPHA_WORKAROUND_H
++
++#include "nir/nir_builder.h"
++
++#include "tu_shader.h"
++
++/* KGSL does not set b20 of TPL1_DBG_ECO_CNTL and b25 of TPL1_DBG_ECO_CNTL1
++ * on A8XX. Without them the TP converts the 2-bit alpha of
++ * 10_10_10_2_UNORM with fp16 precision: an alpha of 1/3 is returned as
++ * `fp16(1/3)` and 2/3 as `2 * fp16(1/3)`, both too low by a factor of
++ * `(1 - 2^-12)`. 0 and 1 are returned exactly.
++ *
++ * Games that decode a material ID for deferred rendering by reading A2
++ * would get a wrong result without the workaround. Patterns seen in the
++ * games:
++ *
++ * ```
++ * vec4 gb = texelFetch(gbuffer, coord, 0);   // A2B10G10R10_UNORM
++ * bool flag = gb.a > 0.666666;
++ * roughness = flag ? min(other.a, 0.08) : fract(...) * 0.090667;
++ * ```
++ *
++ * ```
++ * vec4 gb = texelFetch(gbuffer, coord, 0);
++ * int id = int(gb.a * 3.0);
++ * ```
++ *
++ * We match trunc(fmul(alpha, const)) and comparisons of alpha with a constant
++ * where the error changes the result, and multiply alpha by 4096 / 4095 when
++ * the descriptor marks the alpha channel as A2, see FDL6_A2_MASK_DWORD.
++ * Non-identity view swizzles that move the alpha to another channel are not
++ * handled.
++ */
++
++/* fp16(1/3), which the TP returns for an alpha of 1/3. */
++#define A2_ALPHA_HW_THIRD (1365.0f / 4096.0f)
++
++/* The source src of alu reads the alpha result. */
++struct a2_alpha_site {
++   nir_alu_instr *alu;
++   unsigned src;
++   nir_scalar result;
++};
++
++static inline bool
++is_a2_alpha_image_format(nir_intrinsic_instr *intr)
++{
++   enum pipe_format format = nir_intrinsic_format(intr);
++   if (intr->intrinsic == nir_intrinsic_image_deref_load) {
++      nir_variable *var = nir_intrinsic_get_var(intr, 0);
++      format = var ? var->data.image.format : PIPE_FORMAT_NONE;
++   }
++   return format == PIPE_FORMAT_NONE || format == PIPE_FORMAT_R10G10B10A2_UNORM ||
++          format == PIPE_FORMAT_B10G10R10A2_UNORM;
++}
++
++/* Whether instr is a float32 texture or image load that may read A2. */
++static inline bool
++is_a2_alpha_load(nir_instr *instr)
++{
++   if (instr->type == nir_instr_type_tex) {
++      nir_tex_instr *tex = nir_instr_as_tex(instr);
++      switch (tex->op) {
++      case nir_texop_tex:
++      case nir_texop_txb:
++      case nir_texop_txl:
++      case nir_texop_txd:
++      case nir_texop_txf:
++      case nir_texop_txf_ms:
++      case nir_texop_tg4:
++         break;
++      default:
++         return false;
++      }
++
++      return tex->def.bit_size == 32 && !tex->is_shadow && nir_alu_type_get_base_type(tex->dest_type) == nir_type_float;
++   }
++
++   if (instr->type == nir_instr_type_intrinsic) {
++      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
++      switch (intr->intrinsic) {
++      case nir_intrinsic_image_deref_load:
++      case nir_intrinsic_image_load:
++      case nir_intrinsic_bindless_image_load:
++         return intr->def.bit_size == 32 &&
++                nir_alu_type_get_base_type(nir_intrinsic_dest_type(intr)) == nir_type_float &&
++                is_a2_alpha_image_format(intr);
++      default:
++         return false;
++      }
++   }
++
++   return false;
++}
++
++/* Which component of the texels channel chan of a load result holds. */
++static inline unsigned
++a2_alpha_load_component(nir_instr *instr, unsigned chan)
++{
++   /* tg4 returns the same component of 4 texels in every channel. */
++   if (instr->type == nir_instr_type_tex && nir_instr_as_tex(instr)->op == nir_texop_tg4)
++      return nir_instr_as_tex(instr)->component;
++   return chan;
++}
++
++static inline bool
++is_a2_alpha_result(nir_scalar s)
++{
++   nir_instr *instr = nir_def_instr(s.def);
++   return s.comp < 4 && is_a2_alpha_load(instr) && a2_alpha_load_component(instr, s.comp) == 3;
++}
++
++/* Whether trunc(alpha * k) of what the TP returns differs from that of the
++ * correct value, for a texel with an alpha of 1/3 or 2/3. An fsat between the
++ * multiply and the truncation is ignored, it can't make equal values differ.
++ */
++static inline bool
++a2_alpha_error_matters(nir_op op, float k)
++{
++   for (unsigned thirds = 1; thirds <= 2; thirds++) {
++      float hw = k * (thirds * A2_ALPHA_HW_THIRD);
++      double exact = (double) k * thirds / 3.0;
++      if (op == nir_op_ffloor ? floorf(hw) != floor(exact) : truncf(hw) != trunc(exact))
++         return true;
++   }
++
++   return false;
++}
++
++/* Whether the load returns unfiltered texels, whose alpha can only be 0, 1/3,
++ * 2/3 or 1.
++ */
++static inline bool
++is_a2_alpha_load_unfiltered(nir_instr *instr)
++{
++   if (instr->type != nir_instr_type_tex)
++      return true;
++
++   nir_texop op = nir_instr_as_tex(instr)->op;
++   return op == nir_texop_txf || op == nir_texop_txf_ms || op == nir_texop_tg4;
++}
++
++static inline bool
++is_a2_alpha_cmp(nir_op op)
++{
++   return op == nir_op_flt || op == nir_op_fge || op == nir_op_feq || op == nir_op_fneu;
++}
++
++/* Whether comparing what the TP returns with t gives a different result than
++ * comparing the correct value, for a texel with an alpha of 1/3 or 2/3. The
++ * alpha is the source alpha_src of the comparison, like a > 0.666666.
++ */
++static inline bool
++a2_alpha_cmp_error_matters(nir_op op, unsigned alpha_src, float t)
++{
++   for (unsigned thirds = 1; thirds <= 2; thirds++) {
++      float v[2] = { thirds * A2_ALPHA_HW_THIRD, thirds / 3.0f };
++      bool res[2];
++      for (unsigned i = 0; i < 2; i++) {
++         float a = alpha_src == 0 ? v[i] : t;
++         float b = alpha_src == 0 ? t : v[i];
++         switch (op) {
++         case nir_op_flt:
++            res[i] = a < b;
++            break;
++         case nir_op_fge:
++            res[i] = a >= b;
++            break;
++         case nir_op_feq:
++            res[i] = a == b;
++            break;
++         default:
++            res[i] = a != b;
++            break;
++         }
++      }
++      if (res[0] != res[1])
++         return true;
++   }
++
++   return false;
++}
++
++static inline bool
++is_a2_alpha_trunc(nir_op op)
++{
++   return op == nir_op_ffloor || op == nir_op_ftrunc || op == nir_op_f2i32 || op == nir_op_f2u32;
++}
++
++/* Whether def is only converted to an integer, possibly after fsat. Other
++ * uses, like fract(a * 16), see the error scaled by the constant.
++ */
++static inline bool
++is_a2_alpha_only_truncated(nir_def *def)
++{
++   nir_foreach_use_including_if (src, def) {
++      if (nir_src_is_if(src) || nir_src_use_instr(src)->type != nir_instr_type_alu)
++         return false;
++
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_use_instr(src));
++      if (alu->op == nir_op_fsat || alu->op == nir_op_mov) {
++         if (!is_a2_alpha_only_truncated(&alu->def))
++            return false;
++      } else if (!is_a2_alpha_trunc(alu->op)) {
++         return false;
++      }
++   }
++
++   return true;
++}
++
++/* Match cmp(result, const) or trunc(fsat?(fmul(result, const))), result is
++ * a float32 channel of a texture or image load.
++ */
++static inline bool
++match_a2_alpha_shape(nir_alu_instr *alu, struct a2_alpha_site *site, float *k)
++{
++   if (alu->def.num_components != 1)
++      return false;
++
++   nir_scalar s;
++   if (is_a2_alpha_cmp(alu->op)) {
++      if (alu->src[0].src.ssa->bit_size != 32)
++         return false;
++      s = nir_get_scalar(&alu->def, 0);
++   } else if (is_a2_alpha_trunc(alu->op)) {
++      s = nir_scalar_chase_movs(nir_scalar_chase_alu_src(nir_get_scalar(&alu->def, 0), 0));
++      if (nir_scalar_is_alu(s) && nir_scalar_alu_op(s) == nir_op_fsat)
++         s = nir_scalar_chase_movs(nir_scalar_chase_alu_src(s, 0));
++
++      if (!nir_scalar_is_alu(s) || nir_scalar_alu_op(s) != nir_op_fmul || s.def->num_components != 1)
++         return false;
++   } else {
++      return false;
++   }
++
++   for (unsigned i = 0; i < 2; i++) {
++      nir_scalar result = nir_scalar_chase_movs(nir_scalar_chase_alu_src(s, i));
++      nir_scalar other = nir_scalar_chase_movs(nir_scalar_chase_alu_src(s, 1 - i));
++      if (nir_scalar_is_const(other) && result.comp < 4 && is_a2_alpha_load(nir_def_instr(result.def))) {
++         *site = (struct a2_alpha_site) {
++            .alu = nir_scalar_as_alu(s),
++            .src = i,
++            .result = result,
++         };
++         *k = nir_scalar_as_float(other);
++         return true;
++      }
++   }
++
++   return false;
++}
++
++/* Like match_a2_alpha_shape(), but the result has to be the alpha channel.
++ *
++ * Comparisons are only fixed when the error changes them for an alpha of 1/3
++ * or 2/3. For unfiltered texels whose product is only truncated, the error
++ * also has to change the result. A filtered alpha can be any value, so the
++ * error can change the truncated result for any constant.
++ */
++static inline bool
++match_a2_alpha_site(nir_alu_instr *alu, struct a2_alpha_site *site)
++{
++   float k;
++   if (!match_a2_alpha_shape(alu, site, &k) || !is_a2_alpha_result(site->result))
++      return false;
++
++   if (is_a2_alpha_cmp(alu->op))
++      return a2_alpha_cmp_error_matters(alu->op, site->src, k);
++
++   return !is_a2_alpha_load_unfiltered(nir_def_instr(site->result.def)) ||
++          !is_a2_alpha_only_truncated(&site->alu->def) || a2_alpha_error_matters(alu->op, k);
++}
++
++static inline bool
++tu_nir_has_a2_alpha_sites(nir_shader *shader)
++{
++   nir_foreach_function_impl (impl, shader) {
++      nir_foreach_block (block, impl) {
++         nir_foreach_instr (instr, block) {
++            struct a2_alpha_site site;
++            if (instr->type == nir_instr_type_alu && match_a2_alpha_site(nir_instr_as_alu(instr), &site))
++               return true;
++         }
++      }
++   }
++
++   return false;
++}
++
++/* The bindless resource of a lowered A2 load, or NULL. */
++static inline nir_intrinsic_instr *
++get_a2_alpha_bindless(nir_instr *instr)
++{
++   nir_def *handle;
++   if (instr->type == nir_instr_type_tex) {
++      nir_tex_instr *tex = nir_instr_as_tex(instr);
++      int handle_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
++      if (handle_idx < 0)
++         return NULL;
++      handle = tex->src[handle_idx].src.ssa;
++   } else {
++      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
++      if (intr->intrinsic != nir_intrinsic_bindless_image_load)
++         return NULL;
++      handle = intr->src[0].ssa;
++   }
++
++   if (!nir_def_is_intrinsic(handle) || nir_def_as_intrinsic(handle)->intrinsic != nir_intrinsic_bindless_resource_ir3)
++      return NULL;
++
++   return nir_def_as_intrinsic(handle);
++}
++
++struct lower_a2_alpha_state {
++   struct tu_shader *shader;
++   bool load_shader_consts_via_preamble;
++   const struct ir3_const_allocations *const_allocs;
++};
++
++/* Load the A2 channel mask of the descriptor, see FDL6_A2_MASK_DWORD. */
++static inline nir_def *
++build_a2_mask(nir_builder *b, nir_intrinsic_instr *bindless, const struct lower_a2_alpha_state *state)
++{
++   nir_def *set_base =
++      tu_build_desc_set_base(b, bindless, state->shader, state->load_shader_consts_via_preamble, state->const_allocs);
++   nir_def *mask_offset =
++      nir_iadd_imm(b, nir_imul_imm(b, bindless->src[0].ssa, FDL6_TEX_CONST_DWORDS * 4), FDL6_A2_MASK_DWORD * 4);
++   return nir_load_global_offset(
++      b, 1, 32, set_base, mask_offset,
++      .access = static_cast<enum gl_access_qualifier>(ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER | ACCESS_CAN_SPECULATE),
++      .align_mul = 4, .align_offset = 0);
++}
++
++static inline bool
++lower_a2_alpha(nir_builder *b, nir_alu_instr *alu, void *data)
++{
++   auto state = static_cast<const lower_a2_alpha_state *>(data);
++
++   struct a2_alpha_site site;
++   if (!match_a2_alpha_site(alu, &site))
++      return false;
++
++   nir_intrinsic_instr *bindless = get_a2_alpha_bindless(nir_def_instr(site.result.def));
++   if (!bindless)
++      return false;
++
++   b->cursor = nir_before_instr(&site.alu->instr);
++
++   nir_def *mask = build_a2_mask(b, bindless, state);
++   nir_def *v = nir_channel(b, site.result.def, site.result.comp);
++   nir_def *is_a2 = nir_i2b(b, nir_iand_imm(b, mask, 1u << 3));
++   nir_def *fixed = nir_fmin_imm(b, nir_fmul_imm(b, v, 4096.0 / 4095.0), 1.0);
++
++   nir_src_rewrite(&site.alu->src[site.src].src, nir_bcsel(b, is_a2, fixed, v));
++   site.alu->src[site.src].swizzle[0] = 0;
++   return true;
++}
++
++static inline bool
++tu_nir_lower_a2_alpha(nir_shader *nir,
++                      struct tu_shader *shader,
++                      bool load_shader_consts_via_preamble,
++                      const struct ir3_const_allocations *const_allocs)
++{
++   struct lower_a2_alpha_state state = {
++      .shader = shader,
++      .load_shader_consts_via_preamble = load_shader_consts_via_preamble,
++      .const_allocs = const_allocs,
++   };
++   return nir_shader_alu_pass(nir, lower_a2_alpha, nir_metadata_control_flow, &state);
++}
++
++#endif /* TU_NIR_A2_ALPHA_WORKAROUND_H */
+diff --git a/src/freedreno/vulkan/tu_shader.cc b/src/freedreno/vulkan/tu_shader.cc
+index 103790a4433a..91d189785e21 100644
+--- a/src/freedreno/vulkan/tu_shader.cc
++++ b/src/freedreno/vulkan/tu_shader.cc
+@@ -22,6 +22,7 @@
+ #include "tu_descriptor_set.h"
+ #include "tu_device.h"
+ #include "tu_lrz.h"
++#include "tu_nir_a2_alpha_workaround.h"
+ #include "tu_pipeline.h"
+ #include "tu_rmv.h"
+ #include "tu_sampler.h"
+@@ -1606,7 +1607,8 @@ tu_lower_io(nir_shader *shader, struct tu_device *dev,
+ 
+    ir3_const_alloc(const_allocs, IR3_CONST_ALLOC_INLINE_UNIFORM_ADDRS, ldgk_consts, 1);
+ 
+-   if (dev->physical_device->compiler_options.enable_ssbo_emulation) {
++   if (dev->physical_device->compiler_options.enable_ssbo_emulation ||
++       (dev->physical_device->compiler_options.a2_alpha_fixup && tu_nir_has_a2_alpha_sites(shader))) {
+       const_state->num_bindless_base_addresses = layout->num_sets;
+       const_state->bindless_base_const_offset_vec4 = const_allocs->max_const_offset_vec4;
+ 
+@@ -1876,8 +1878,8 @@ get_ssbo_bindless(nir_intrinsic_instr *intr)
+    return bindless;
+ }
+ 
+-static nir_def *
+-build_ssbo_global_addr(nir_builder *b,
++nir_def *
++tu_build_desc_set_base(nir_builder *b,
+                        nir_intrinsic_instr *bindless,
+                        struct tu_shader *shader,
+                        bool load_shader_consts_via_preamble,
+@@ -1899,13 +1901,24 @@ build_ssbo_global_addr(nir_builder *b,
+          nir_load_const_ir3(b, 2, 32, nir_imm_int(b, 0), .base = dword_base);
+    }
+ 
++   return nir_pack_64_2x32(b, set_base);
++}
++
++static nir_def *
++build_ssbo_global_addr(nir_builder *b,
++                       nir_intrinsic_instr *bindless,
++                       struct tu_shader *shader,
++                       bool load_shader_consts_via_preamble,
++                       const struct ir3_const_allocations *const_allocs)
++{
++   nir_def *set_base = tu_build_desc_set_base(b, bindless, shader, load_shader_consts_via_preamble, const_allocs);
++
+    nir_def *descriptor_offset = nir_iadd_imm(
+       b, nir_imul_imm(b, bindless->src[0].ssa, FDL6_TEX_CONST_DWORDS * 4),
+       11 * 4);
+    nir_def *descriptor_words = nir_load_global_offset(
+-      b, 2, 32, nir_pack_64_2x32(b, set_base), descriptor_offset,
+-      .access = static_cast<enum gl_access_qualifier>(
+-         ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER | ACCESS_CAN_SPECULATE),
++      b, 2, 32, set_base, descriptor_offset,
++      .access = static_cast<enum gl_access_qualifier>(ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER | ACCESS_CAN_SPECULATE),
+       .align_mul = 4, .align_offset = 0);
+ 
+    return nir_pack_64_2x32(b, descriptor_words);
+@@ -3727,6 +3740,12 @@ tu_shader_create(struct tu_device *dev,
+       NIR_PASS(_, nir, tu_nir_lower_ssbo_address_size, &lower_ssbo_state);
+    }
+ 
++   /* Run after finalize, so the matched code is final. */
++   if (dev->physical_device->compiler_options.a2_alpha_fixup && shader->const_state.num_bindless_base_addresses) {
++      NIR_PASS(_, nir, tu_nir_lower_a2_alpha, shader, dev->compiler->info->props.load_shader_consts_via_preamble,
++               &const_allocs);
++   }
++
+    const struct ir3_shader_options options = {
+       .api_wavesize = key->api_wavesize,
+       .real_wavesize = key->real_wavesize,
+diff --git a/src/freedreno/vulkan/tu_shader.h b/src/freedreno/vulkan/tu_shader.h
+index e729d44d4a07..fd29738fea69 100644
+--- a/src/freedreno/vulkan/tu_shader.h
++++ b/src/freedreno/vulkan/tu_shader.h
+@@ -177,6 +177,13 @@ tu_nir_lower_ray_queries(nir_shader *nir);
+ bool
+ tu_nir_lower_demote_samples(nir_shader *nir);
+ 
++nir_def *
++tu_build_desc_set_base(nir_builder *b,
++                       nir_intrinsic_instr *bindless,
++                       struct tu_shader *shader,
++                       bool load_shader_consts_via_preamble,
++                       const struct ir3_const_allocations *const_allocs);
++
+ nir_shader *
+ tu_spirv_to_nir(struct tu_device *dev,
+                 void *mem_ctx,
+-- 
+GitLab
+

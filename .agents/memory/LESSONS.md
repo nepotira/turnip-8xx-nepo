@@ -1,0 +1,4 @@
+# Lições Aprendidas e Correções do Usuário (`LESSONS.md`)
+
+- **2026-11-06 (Escopo de Pesquisa de Forks):** Ao analisar problemas e planejar correções para o driver Turnip, nunca restringir a auditoria apenas ao Mesa Upstream oficial; sempre mapear e auditar todos os forks comunitários modificados (tanto os focados em Adreno 8xx quanto os de A6xx/A7xx/cross-gen), aproveitando correções já validadas por traces de hardware e rejeitando patches defeituosos (como erros matemáticos de CCU/GMEM ou código morto gerado por LLM).
+- **2026-11-06 (`GEMINI.md` Local):** O arquivo `GEMINI.md` na raiz de `/home/nepo/Downloads/TURNIP` deve permanecer na pasta local do usuário, mas listado no `.gitignore` para nunca ser enviado ao repositório público.

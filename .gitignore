@@ -1,0 +1,40 @@
+# Segredos e arquivos locais não públicos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+GEMINI.md
+
+# Dependências e builds (Mesa / Android NDK)
+node_modules/
+vendor/
+dist/
+build/
+build-*/
+mesa/
+mesa-src/
+ndk/
+artefatos/
+__pycache__/
+*.pyc
+.venv/
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs, dumps e pacotes compilados
+*.log
+*.sql.gz
+*.img
+*.iso
+*.zip
+*.adpkg
+*.so
+
+# Mantém pastas vazias importantes
+!docs/handoffs/.gitkeep
