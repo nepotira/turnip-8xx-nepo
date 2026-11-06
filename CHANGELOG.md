@@ -5,6 +5,14 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-06
+### Fixed
+- **Correção da renderização em 2160p (4K / 3840x2160):** Removida a imposição cega de `prefer_gmem` (`tu_autotune_algorithm=prefer_gmem` e `DEFAULT=PREFER_GMEM`), restaurando o algoritmo dinâmico `BANDWIDTH` no `tu_autotune.cc`. No Adreno 825 com 1 MB de GMEM (752 KB utilizáveis), forçar GMEM em resoluções 4K criava mais de 4.000 tiles, estourando o buffer de fluxo de visibilidade VSC (Visibility Stream Clipper limitado a ~1.400 bins) e provocando o descarte de 65% dos bins/tela. Com `BANDWIDTH`, o driver usa GMEM em 720p/1080p e seleciona automaticamente SYSMEM (Direct Rendering) em 2160p, renderizando 100% da tela sem cortes nem VSC overflow.
+- **Correção da precisão alpha A2B10G10R10 no Adreno 8xx KGSL (`tu_fix_a2_alpha_precision = true`):** Ativada a correção de precisão alpha do patch `mr45973` para emuladores de Switch no `00-turnip-defaults.conf`. No A8XX com KGSL, o hardware lê o alpha de 2 bits com subestimação `(1 - 2^-12)`, quebrando a decodificação de material ID / roughness em renderers deferred (como em *Super Mario Odyssey*) e provocando estouro especular branco puro na cena inteira.
+- **Expansão da sanitização NIR para Compute Shaders e Image Stores (`patches/60-a8xx-sanitize-frag-nan.py`):** Estendida a sanitização do IR3 para interceptar `nir_intrinsic_image_store`, `bindless_image_store` e `image_deref_store` em `MESA_SHADER_COMPUTE` e `MESA_SHADER_FRAGMENT`, substituindo NaNs e Infs por zero/clamp em passes de névoa volumétrica e bloom executados por compute shaders.
+- **Remoção de `tu_enable_fast_border_color_for_undefined_formats`:** Previne que samplers com formatos indefinidos retornem branco opaco indesejado em bordas de textura.
+
+
 ## [0.2.3] - 2026-11-06
 ### Fixed
 - **Correção da tela 65% preta / não renderizada:** Removida a ativação de `tu_binning_conservative_rast` em Adreno 8xx (`58-a8xx-conservative-rast.py`), restaurando estritamente `CHIP == A7XX`. No Adreno 8xx, a rasterização conservadora de binning provocava o corte da bounding box ao tamanho do buffer interno de 720p (`1280x720`) em telas de `2400x1080` (`(1280*720)/(2400*1080) = 35.5%`, resultando em exatamente 64.5% ≈ 65% da tela preta na apresentação).

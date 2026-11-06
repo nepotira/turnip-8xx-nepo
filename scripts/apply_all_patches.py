@@ -400,25 +400,17 @@ def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
         required=True,
     )
 
-    if variant in ("biggmem", "switch2"):
-        tu_autotune = mesa_dir / "src/freedreno/vulkan/tu_autotune.cc"
-        edit_file_idempotent(
-            tu_autotune,
-            "   DEFAULT = BANDWIDTH, /* Default algorithm, used if no other is specified. */",
-            "   DEFAULT = PREFER_GMEM, /* BigGMEM/Switch2 variant: prefer GMEM on Adreno 825 1 MB GMEM */",
-            "BigGMEM/Switch2 PREFER_GMEM default algorithm in tu_autotune.cc",
-            required=True,
-        )
-
     # Layer 4B: Driconf profiles for Switch emulators, Hogwarts Legacy, and Mortal Kombat 11
+    # Note: Keep tu_autotune DEFAULT = BANDWIDTH so that resolutions like 720p/1080p use GMEM
+    # while high resolutions like 1440p/2160p (4K) automatically fall back to SYSMEM, avoiding
+    # VSC binning overflows on 1 MB GMEM GPUs (Adreno 825) that cause 65% black screens.
     driconf = mesa_dir / "src/freedreno/vulkan/00-turnip-defaults.conf"
     app_profiles = """
         <!-- Nintendo Switch Emulators: Nyushu, Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
         <application name="Switch Emulators" application_name_match=".*([Ee]den|[Yy]uzu|[Cc]itron|[Ss]udachi|[Ss]uyu|[Rr]yujinx|[Nn]yushu|dev\\.eden|org\\.citron|org\\.yuzu|org\\.nyushu).*">
             <option name="tu_independent_icache_miss" value="true" />
-            <option name="tu_autotune_algorithm" value="prefer_gmem" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
-            <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
+            <option name="tu_fix_a2_alpha_precision" value="true" />
         </application>
 
         <!-- Hogwarts Legacy (Switch Edition & PC DX12 Phoenix-Win64-Shipping via VKD3D-Proton) -->

@@ -1,8 +1,8 @@
 # Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-- **Versão atual:** `v0.2.3`
+- **Versão atual:** `v0.2.4`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Correção nativa do glitch de elementos esbranquiçados via sanitização NIR (`ir3_nir_sanitize_frag_outputs`) e eliminação do bug de 65% da tela preta pela desativação de rasterização conservadora de binning em A8XX, com suporte de primeira classe ao emulador Nyushu.
+- **Fase atual:** Resolução definitiva da renderização em 2160p (restauração do autotune BANDWIDTH com fallback dinâmico para SYSMEM sem estouro de VSC) e eliminação do esbranquiçado no Adreno 8xx KGSL (`tu_fix_a2_alpha_precision=true` para emuladores e sanitização NIR expandida para compute shaders e image stores).
 - **Ramo ativo:** `main`
 - **Status de verificação:**
   - `python3 scripts/verify_patch_stack.py` (validação de 18 patches + 12 scripts Python + módulo aimapper + GMEM math): **VERIFICADO (PASS)**.
