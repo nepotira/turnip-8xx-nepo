@@ -33,6 +33,7 @@ Stack modular de patches e CI para compilação do driver Vulkan Mesa Turnip oti
 11. Licenças: todo código novo segue a licença `MIT` (compatível com Mesa 3D); terceiros e créditos em `THIRD_PARTY_LICENSES.md` e `NOTICE`.
 12. Antes de parar ou trocar de agente: `/handoff`. Ao chegar: `/retomar`.
 13. Passo a passo para o usuário sempre com o COMO (caminho, clique/toque, comando completo).
+14. Proibição absoluta de suposições técnicas: NUNCA declarar causas-raiz de falhas gráficas, bugs de driver ou limites de hardware sem inspeção direta e comprovada no código real do Mesa, kernel KGSL e emulador. É terminantemente proibido chutar números, registradores ou limites de buffer sem conferência no código-fonte real.
 
 ## Regras locais deste projeto
 - O arquivo `GEMINI.md` na raiz local fica apenas na pasta local e está listado no `.gitignore` para nunca ser publicado.
@@ -43,6 +44,7 @@ Stack modular de patches e CI para compilação do driver Vulkan Mesa Turnip oti
 `README.md` · `RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md` · `PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md` · `CONTRIBUTING.md` · `SECURITY.md` · `LICENSE` · `NOTICE` · `THIRD_PARTY_LICENSES.md` · `CHANGELOG.md` · `docs/` (PROJECT_STATE, REQUIREMENTS, ARCHITECTURE, RUNBOOK, TESTING, TROUBLESHOOTING, GLOSSARY, JOURNAL, RETROFIT, LICENSING, ENVIRONMENT) · `docs/adr/` · `docs/handoffs/`
 
 ## Nunca
+- Afirmar, deduzir ou declarar causas de bugs ou limites de hardware por especulação teórica sem ler o código-fonte real correspondente.
 - Reescrever histórico publicado, mexer em tag publicada ou apagar branch sem pedido explícito.
 - Adicionar dependência sem registrar motivo e licença.
 - Ampliar o escopo além da tarefa aprovada.

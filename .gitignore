@@ -8,6 +8,7 @@ secrets/
 GEMINI.md
 
 # Dependências e builds (Mesa / Android NDK)
+.scratch/
 node_modules/
 vendor/
 dist/

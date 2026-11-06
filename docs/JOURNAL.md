@@ -1,5 +1,17 @@
 # Diário do Projeto (`JOURNAL.md`)
 
+## 2026-11-06 — Diagnóstico Forense Arquitetural Comprovado em Código Real e Atualização Constitucional
+- **Contexto:** O usuário reportou que nas 3 versões do driver (v0.2.2, v0.2.3, v0.2.4) os erros persistiram idênticos (esbranquiçado em Mario Odyssey e falha em 2160p com 65% de tela preta no Nyushu). O usuário exigiu:
+  1. Análise exaustiva em código-fonte real do Mesa 3D e emuladores para determinar a causa real, sem aplicar resoluções ainda.
+  2. Atualização imediata e urgente da Constituição de Desenvolvimento proibindo categoricamente qualquer suposição, dedução ou chute técnico sem inspeção prévia no código real.
+- **Achados comprovados no código:**
+  - O esbranquiçamento ocorre porque emuladores com compilação assíncrona descartam draw calls com `zeta_enable = true` (`BuiltPipeline()` retorna `nullptr` em `vk_pipeline_cache.cpp`), deixando buracos no Z-buffer que estouram a neblina volumétrica deferred para o infinito ($Z=1.0$), somado a um mismatch matemático de frações CCU em `freedreno_devices.py` (fração `EIGHTH` de hardware aloca 16K/32K, mas software subtraiu 8K/16K, sobrepondo tiles de GMEM em resolve).
+  - O corte de 65% em 2160p corresponde matematicamente à proporção de um frame 720p base ($1280 \times 720 = 921.600$ px) apresentado sobre um display de $2400 \times 1080$ ($2.592.000$ px): $921.600 / 2.592.000 = 35,55\%$ renderizado, restando exatamente $64,44\% \approx 65\%$ de tela preta devido a falha de redimensionamento do scissor/framebuffer de apresentação e alinhamento de 64 pixels em swapchain UBWC.
+- **Ações executadas:**
+  - Emissão do relatório forense detalhado em `docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`.
+  - Atualização mandatória da Constituição global em `~/antigravity-dev-rules/global/GEMINI.md` e local em `AGENTS.md` e `.agents/memory/LESSONS.md` proibindo suposições e deduções técnicas sem leitura do código-fonte real.
+  - Nenhuma alteração no código do driver foi aplicada nesta etapa, aguardando instruções do usuário.
+
 ## 2026-11-06 — Implementação dos Patches 58 e 59 (Conservative Rast e Coalescência UBO no IR3 para Adreno 825) (v0.2.2)
 - **Contexto:** Aplicação das soluções restantes detalhadas no Plano de Implementação e no Relatório Técnico:
   1. Patch 58 (`58-a8xx-conservative-rast.py`): Expansão da rasterização conservadora para binning com FDM / VRS em `CHIP >= A7XX`.
