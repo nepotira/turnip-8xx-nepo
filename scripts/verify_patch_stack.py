@@ -133,7 +133,7 @@ def verify_gmem_mathematics() -> None:
         f"usable_gmem={sustained_gmem['usable_gmem'] // 1024} KB"
     )
 
-    # 4. Verify Variant 2 (BigGMEM -e) GMEM
+    # 4. Verify Variant 2 & 4 (BigGMEM -e / Switch2 -s2) GMEM
     biggmem = calc_a8xx_cache_offsets(
         gmem_bytes=gmem_1mb,
         num_ccu=4,
@@ -145,7 +145,7 @@ def verify_gmem_mathematics() -> None:
     )
     assert biggmem["usable_gmem"] == 752 * 1024
     print(
-        f"      OK [BigGMEM -e]:                total_reserved={biggmem['total_reserved'] // 1024} KB, "
+        f"      OK [BigGMEM -e / Switch2 -s2]:  total_reserved={biggmem['total_reserved'] // 1024} KB, "
         f"usable_gmem={biggmem['usable_gmem'] // 1024} KB"
     )
 

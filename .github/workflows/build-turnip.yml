@@ -51,6 +51,10 @@ jobs:
             suffix: "-p"
             package_name: "Turnip-A8xx-8sGen4-MaxPerf"
             description: "Max Peak Throughput for Winlator/GameHub DX12/VK on Adreno 825 & Adreno 8xx (Active Cooling Recommended)"
+          - variant: switch2
+            suffix: "-s2"
+            package_name: "Turnip-A8xx-8sGen4-Switch2"
+            description: "Specialized for Nintendo Switch 2 (T239/NVN2), DLSS 5 / Cooperative Matrix, Mesh Shaders & Zero-Stutter Shader Delivery"
 
     steps:
       - name: Checkout patch repository

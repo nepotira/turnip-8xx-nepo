@@ -11,7 +11,8 @@ Applies:
              hardcoded <A7XX> offsets 2036..2168 that read inside fc1_b instead of metadata
              at 8192+ on A8XX), plus SP hysteresis tuning.
   - Layer 3: KGSL sparse VMA tu_dump_bo_init(dev, bo) list initialization fix in tu_knl_kgsl.cc.
-  - Layer 4: Variant-specific autotune and GMEM/Register optimizations (sustained, biggmem, maxperf).
+  - Layer 4: Application Driconf tuning (Switch Emulators Eden/Citron/Sudachi/Yuzu, Hogwarts Legacy,
+             Mortal Kombat 11) and variant-specific autotune (sustained, biggmem, maxperf, switch2).
 """
 
 import argparse
@@ -208,7 +209,7 @@ def apply_layer1_silicon_and_gmem(mesa_dir: Path, variant: str) -> None:
 
         # 3. Add Adreno 825 (Snapdragon 8s Gen 4 / SM8735, chip_id=0x44030000) with 1 MB GMEM math
         if "0x44030000" not in content:
-            if variant == "biggmem":
+            if variant in ("biggmem", "switch2"):
                 gmem_depth_props = (
                     "            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
                     "            gmem_per_ccu_color_cache_size = 8 * 1024,\n"
@@ -225,6 +226,13 @@ def apply_layer1_silicon_and_gmem(mesa_dir: Path, variant: str) -> None:
 
             early_preamble_prop = (
                 "            has_early_preamble = False,\n" if variant == "maxperf" else ""
+            )
+
+            switch2_props = (
+                "            has_attachment_shading_rate = True,\n"
+                "            shading_rate_matches_vk = True,\n"
+                if variant == "switch2"
+                else ""
             )
 
             a825_entry = f"""add_gpus([
@@ -245,7 +253,7 @@ def apply_layer1_silicon_and_gmem(mesa_dir: Path, variant: str) -> None:
             gmem_vpc_bv_pos_buf_size = 16384,
 {gmem_depth_props}            has_fs_tex_prefetch = False,
             supports_double_threadsize = False,
-{early_preamble_prop}        )],
+{early_preamble_prop}{switch2_props}        )],
         num_ccu = 4,
         num_slices = 2,
         tile_align_w = 64,
@@ -356,7 +364,19 @@ def apply_layer2_pipeline_and_lrz(mesa_dir: Path, variant: str) -> None:
             "      tu_cs_emit_regs(cs, SP_VS_HYSTERESIS(CHIP, .dword = 0x00000800));\n"
             "      tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0x00000800));",
             "MaxPerf doubled SP hysteresis thresholds",
-            required=True,
+            required=False,
+        )
+    elif variant == "switch2":
+        edit_file_idempotent(
+            tu_cmd,
+            "tu_cs_emit_regs(cs, SP_PS_HYSTERESIS(CHIP, .dword = 0x00000c00));\n"
+            "      tu_cs_emit_regs(cs, SP_VS_HYSTERESIS(CHIP, .dword = 0x00000400));\n"
+            "      tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0x00000400));",
+            "tu_cs_emit_regs(cs, SP_PS_HYSTERESIS(CHIP, .dword = 0x00001000));\n"
+            "      tu_cs_emit_regs(cs, SP_VS_HYSTERESIS(CHIP, .dword = 0x00000600));\n"
+            "      tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0x00000600));",
+            "Switch2 balanced SP hysteresis thresholds",
+            required=False,
         )
 
 
@@ -376,15 +396,49 @@ def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
         required=True,
     )
 
-    if variant == "biggmem":
+    if variant in ("biggmem", "switch2"):
         tu_autotune = mesa_dir / "src/freedreno/vulkan/tu_autotune.cc"
         edit_file_idempotent(
             tu_autotune,
             "   DEFAULT = BANDWIDTH, /* Default algorithm, used if no other is specified. */",
-            "   DEFAULT = PREFER_GMEM, /* BigGMEM variant: prefer GMEM on Adreno 825 1 MB GMEM */",
-            "BigGMEM PREFER_GMEM default algorithm in tu_autotune.cc",
+            "   DEFAULT = PREFER_GMEM, /* BigGMEM/Switch2 variant: prefer GMEM on Adreno 825 1 MB GMEM */",
+            "BigGMEM/Switch2 PREFER_GMEM default algorithm in tu_autotune.cc",
             required=True,
         )
+
+    # Layer 4B: Driconf profiles for Switch emulators, Hogwarts Legacy, and Mortal Kombat 11
+    driconf = mesa_dir / "src/freedreno/vulkan/00-turnip-defaults.conf"
+    app_profiles = """
+        <!-- Nintendo Switch Emulators: Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
+        <application name="Switch Emulators" application_name_match=".*(eden|yuzu|citron|sudachi|suyu|ryujinx).*">
+            <option name="tu_independent_icache_miss" value="true" />
+            <option name="tu_autotune_algorithm" value="prefer_gmem" />
+            <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
+            <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
+        </application>
+
+        <!-- Hogwarts Legacy (DX12 UE4/5 via VKD3D-Proton) -->
+        <application name="Hogwarts Legacy" application_name_match=".*Hogwarts.*">
+            <option name="tu_autotune_algorithm" value="prefer_sysmem" />
+            <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
+            <option name="tu_enable_ssbo_emulation" value="true" />
+            <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
+        </application>
+
+        <!-- Mortal Kombat 11 (DX11/DX12 via DXVK/VKD3D-Proton) -->
+        <application name="Mortal Kombat 11" application_name_match=".*(MK11|MortalKombat11).*">
+            <option name="tu_emulate_alpha_to_coverage" value="true" />
+            <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
+            <option name="tu_independent_icache_miss" value="true" />
+        </application>
+"""
+    edit_file_idempotent(
+        driconf,
+        "    </device>\n</driconf>",
+        f"{app_profiles}    </device>\n</driconf>",
+        "Driconf application profiles for Switch emulators, Hogwarts Legacy, and Mortal Kombat 11",
+        required=True,
+    )
 
 
 def main() -> int:
@@ -392,9 +446,9 @@ def main() -> int:
     parser.add_argument("--mesa-dir", type=Path, default=Path("."), help="Path to Mesa source root")
     parser.add_argument(
         "--variant",
-        choices=["sustained", "biggmem", "maxperf"],
+        choices=["sustained", "biggmem", "maxperf", "switch2"],
         default="sustained",
-        help="Build variant to configure (sustained=-b, biggmem=-e, maxperf=-p)",
+        help="Build variant to configure (sustained=-b, biggmem=-e, maxperf=-p, switch2=-s2)",
     )
     args = parser.parse_args()
 
