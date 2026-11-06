@@ -9,15 +9,15 @@
   - Testes em árvore real Mesa 3D (`.scratch/mesa-src`): Novo patch `patches/64-tu-depth-blit-features.py` aplica cleanly e com idempotência.
   - CI Workflow atualizado para empacotar `vulkan.nepo.so` com `patchelf --set-soname vulkan.nepo.so` e `minApi: 30`.
 
-- **Release publicada:** [v0.2.5](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.5) (Build CI GitHub Actions Run [42220390281](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42220390281)).
+- **Release publicada:** [v0.2.6](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.6) (Build CI GitHub Actions Run [42295905061](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42295905061)).
 
-### Checksums dos Binários v0.2.5 (AdrenoTools .zip)
+### Checksums dos Binários v0.2.6 (AdrenoTools .zip)
 | Arquivo | SHA256 |
 | :--- | :--- |
-| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.5-1991790a.zip` | `21e136203dac8d713f178395636ed5d42bf6128ab80f2ca68bd8e5762e0e9dc7` |
-| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.5-1991790a.zip` | `29851afe8088f14382cf86d8b42a43f9b722b0b21e89790cbb1d1d1786775eea` |
-| `Turnip-A8xx-8sGen4-Sustained-v0.2.5-1991790a.zip` | `593f2b9915bcb71db4183a81c799fca763fae028362737226bb69fed5c7722cf` |
-| `Turnip-A8xx-8sGen4-Switch2-v0.2.5-1991790a.zip` | `1ae6acb69c8f01b97f2ba3718f80bbe1385bf40c82e8e283a9edf47e3319a63d` |
+| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.6-8fc45e20.zip` | `c7c469bd831146d5c82b97df671e0c463d52d9b5f09a5c05f773c0c4239918c7` |
+| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.6-8fc45e20.zip` | `5b21f7aa1c912afe6529e5add066b723dfefaf0723e9b3160e48e8d6a54520be` |
+| `Turnip-A8xx-8sGen4-Sustained-v0.2.6-8fc45e20.zip` | `5a4925951897640f8824cc2f6f59c18c49e218395e36c6b71f965a93266bb61e` |
+| `Turnip-A8xx-8sGen4-Switch2-v0.2.6-8fc45e20.zip` | `01a7db55aac68fa38775306c0c523abc5436edb26bfb45b6ea336c3b9ab0af13` |
 
 
 ## Entregáveis Concluídos
