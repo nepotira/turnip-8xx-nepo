@@ -4,6 +4,9 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo.
 O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e este projeto segue [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+### Added
+- **Relatório Forense e Arquitetural (`docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`):** Diagnóstico comprovado no código-fonte real do Mesa 3D e emuladores sobre as causas do esbranquiçamento em *Super Mario Odyssey* (descarte de depth draw calls em shaders assíncronos no emulador + mismatch de registradores CCU no Adreno 825) e da falha de 2160p com 64,5% (~65%) de tela preta (razão geométrica exata entre viewport 720p não escalado e tela 2400x1080 com desalinhamento de swapchain UBWC).
+- **Constituição e Regras (`AGENTS.md` e `LESSONS.md`):** Regra inegociável proibindo categoricamente qualquer declaração de causa-raiz de falha ou comportamento de hardware por suposição teórica ou dedução sem prévia inspeção e comprovação no código-fonte real.
 
 ## [0.2.4] - 2026-11-06
 ### Fixed

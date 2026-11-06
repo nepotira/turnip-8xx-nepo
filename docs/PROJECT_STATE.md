@@ -2,16 +2,14 @@
 
 - **Versão atual:** `v0.2.4`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Resolução definitiva da renderização em 2160p (restauração do autotune BANDWIDTH com fallback dinâmico para SYSMEM sem estouro de VSC) e eliminação do esbranquiçado no Adreno 8xx KGSL (`tu_fix_a2_alpha_precision=true` para emuladores e sanitização NIR expandida para compute shaders e image stores).
+- **Fase atual:** Investigação forense profunda e diagnóstico arquitetural comprovado no código-fonte real do Mesa 3D e emuladores, identificando as causas reais do esbranquiçamento em Mario Odyssey e da falha de 2160p com 65% de corte de tela no Nyushu. Nenhuma resolução precipitada foi aplicada, cumprindo diretriz do usuário. Atualização imediata da Constituição contra chutes técnicos.
 - **Ramo ativo:** `main`
 - **Status de verificação:**
-  - `python3 scripts/verify_patch_stack.py` (validação de 18 patches + 12 scripts Python + módulo aimapper + GMEM math): **VERIFICADO (PASS)**.
-  - Scratch tests para patches 58 e 60: **PASS**.
-  - Testes em hardware físico (`SM8735` / `POCO F7` com `Adreno 825`):
-    - Confirmação de benchmark informada pelo usuário: **BigGMEM em 1º lugar**, **Sustained em 2º lugar**, **Performance em 3º lugar**.
-    - Desempenho significativamente superior ao Turnip V38 e MrPurple v30.
-    - Glitch esbranquiçado de *Super Mario Odyssey* corrigido nativamente no driver Turnip (NIR flush NaN -> 0.0 + fclamp) e no `nepotira/eden-android-optimizations`.
-    - Bug de 65% de tela preta no Nyushu resolvido pela remoção de conservative binning em A8XX.
+  - `python3 scripts/verify_patch_stack.py`: **VERIFICADO (PASS)**.
+  - Testes em hardware físico (`SM8735` com `Adreno 825`):
+    - Confirmação pelo usuário: O esbranquiçamento em Mario Odyssey e a falha de 2160p com 65% de tela preta no Nyushu persistiram idênticos em v0.2.2, v0.2.3 e v0.2.4.
+    - Diagnóstico forense comprovado no código real emitido em `docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`.
+    - Proibição absoluta de suposições técnicas adicionada à Constituição (`AGENTS.md` e `~/antigravity-dev-rules/global/GEMINI.md`).
   - Release publicada: [v0.2.4](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.4) (Build CI GitHub Actions Run [42203616305](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42203616305)).
 
 ### Checksums dos Binários v0.2.4 (AdrenoTools .zip)
