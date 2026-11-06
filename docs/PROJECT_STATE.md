@@ -10,13 +10,15 @@
   - Correção matemática exata de frações CCU em `scripts/apply_all_patches.py` e `scripts/verify_patch_stack.py`.
   - Novo patch `patches/63-tu-framebuffer-attachment-extent-guard.py` implementado em `tu_device.cc` e `tu_cmd_buffer.cc`.
 
-### Checksums dos Binários v0.2.4 (AdrenoTools .zip)
+- **Release publicada:** [v0.2.5](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.5) (Build CI GitHub Actions Run [42220390281](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42220390281)).
+
+### Checksums dos Binários v0.2.5 (AdrenoTools .zip)
 | Arquivo | SHA256 |
 | :--- | :--- |
-| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.4-35a0fef1.zip` | `92356fc5d274ad6ba44f61a8a8fb7b8fd8043d31d6f4cd2e95c5385160c76a86` |
-| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.4-35a0fef1.zip` | `698b22cd9599a97f5b870446f3086831a16087302a083f79f2527f36e1004d13` |
-| `Turnip-A8xx-8sGen4-Sustained-v0.2.4-35a0fef1.zip` | `75ff5aac43a45653e04aa0f9f211e2798e44233956c0e64cd283800777407452` |
-| `Turnip-A8xx-8sGen4-Switch2-v0.2.4-35a0fef1.zip` | `07f68c275c374864a008cfa9ee2814df605c5fc7caae2d58dc0cee009167c21f` |
+| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.5-1991790a.zip` | `21e136203dac8d713f178395636ed5d42bf6128ab80f2ca68bd8e5762e0e9dc7` |
+| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.5-1991790a.zip` | `29851afe8088f14382cf86d8b42a43f9b722b0b21e89790cbb1d1d1786775eea` |
+| `Turnip-A8xx-8sGen4-Sustained-v0.2.5-1991790a.zip` | `593f2b9915bcb71db4183a81c799fca763fae028362737226bb69fed5c7722cf` |
+| `Turnip-A8xx-8sGen4-Switch2-v0.2.5-1991790a.zip` | `1ae6acb69c8f01b97f2ba3718f80bbe1385bf40c82e8e283a9edf47e3319a63d` |
 
 
 ## Entregáveis Concluídos
