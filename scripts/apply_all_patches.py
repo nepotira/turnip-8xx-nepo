@@ -57,6 +57,7 @@ ORDERED_PY_PATCHES = [
     "60-a8xx-sanitize-frag-nan.py",
     "61-a8xx-lrz-bidir-disable.py",
     "62-a8xx-lrz-color-comp-mask.py",
+    "63-tu-framebuffer-attachment-extent-guard.py",
 ]
 
 
@@ -216,16 +217,16 @@ def apply_layer1_silicon_and_gmem(mesa_dir: Path, variant: str) -> None:
             if variant in ("biggmem", "switch2"):
                 gmem_depth_props = (
                     "            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
-                    "            gmem_per_ccu_color_cache_size = 8 * 1024,\n"
+                    "            gmem_per_ccu_color_cache_size = 16 * 1024,\n"
                     "            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
-                    "            gmem_per_ccu_depth_cache_size = 16 * 1024,\n"
+                    "            gmem_per_ccu_depth_cache_size = 32 * 1024,\n"
                 )
             else:
                 gmem_depth_props = (
                     "            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
-                    "            gmem_per_ccu_color_cache_size = 8 * 1024,\n"
+                    "            gmem_per_ccu_color_cache_size = 16 * 1024,\n"
                     "            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.QUARTER.value,\n"
-                    "            gmem_per_ccu_depth_cache_size = 32 * 1024,\n"
+                    "            gmem_per_ccu_depth_cache_size = 64 * 1024,\n"
                 )
 
             early_preamble_prop = (

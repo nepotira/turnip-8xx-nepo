@@ -4,8 +4,19 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo.
 O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e este projeto segue [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+
+## [0.2.5] - 2026-11-06
+### Fixed
+- **Correção da Invariante Matemática CCU no Adreno 825 / SM8735 (`scripts/apply_all_patches.py` e `scripts/verify_patch_stack.py`):**
+  - Corrigido o cálculo de frações e tamanhos de cache CCU em GMEM (`gmem_ccu_color_cache_fraction`, `gmem_per_ccu_color_cache_size`, `gmem_ccu_depth_cache_fraction`, `gmem_per_ccu_depth_cache_size`). Anteriormente, programava-se a fração de registrador `EIGHTH` enquanto subtraía-se apenas 8 KB / 16 KB por CCU na tabela, gerando sobreposição física de 32 KB de cor e 64 KB de profundidade sobre tiles de GMEM vizinhos no hardware durante operações de resolve.
+  - Para BigGMEM e Switch2: fração `EIGHTH` de cor (16 KB por CCU = 64 KB total) e fração `EIGHTH` de profundidade (32 KB por CCU = 128 KB total), totalizando 368 KB reservados e 656 KB de GMEM utilizável com zero underflow.
+  - Para Sustained e MaxPerf: fração `EIGHTH` de cor (16 KB por CCU = 64 KB total) e fração `QUARTER` de profundidade (64 KB por CCU = 256 KB total), totalizando 496 KB reservados e 528 KB de GMEM utilizável.
+  - Invariante estrita: o valor configurado em `RB_CCU_CACHE_CNTL` coincide exatamente com a faixa de GMEM isolada em `__calc_gmem_cache_offsets`, prevenindo estouros e corrupção gráfica em renders com múltiplos targets.
+- **Correção da tela 65% preta / corte de viewport em 2160p (`patches/63-tu-framebuffer-attachment-extent-guard.py`):**
+  - Em `tu_CreateFramebuffer` (`src/freedreno/vulkan/tu_device.cc`), quando o emulador (Nyushu, Yuzu, Citron) cria um framebuffer com as dimensões base não escaladas do jogo (ex.: 1280x720) mas anexa a view da swapchain de alta resolução em tela cheia (ex.: 2400x1080), as dimensões do framebuffer são expandidas com segurança para `MAX2(pCreateInfo, iview->image->vk.extent)`.
+  - Em `tu6_sysmem_render_begin` (`src/freedreno/vulkan/tu_cmd_buffer.cc`), o comando `tu6_emit_window_scissor` passa a cobrir no mínimo a extensão do `render_areas[0]`, impedindo que o hardware clipa o blit de apresentação a 1280x720 em renderização direta, o que causava $1 - (1280 \times 720) / (2400 \times 1080) = 64,5\% \approx 65\%$ de tela preta.
 ### Added
-- **Relatório Forense e Arquitetural (`docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`):** Diagnóstico comprovado no código-fonte real do Mesa 3D e emuladores sobre as causas do esbranquiçamento em *Super Mario Odyssey* (descarte de depth draw calls em shaders assíncronos no emulador + mismatch de registradores CCU no Adreno 825) e da falha de 2160p com 64,5% (~65%) de tela preta (razão geométrica exata entre viewport 720p não escalado e tela 2400x1080 com desalinhamento de swapchain UBWC).
+- **Relatório Forense e Arquitetural (`docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`):** Diagnóstico definitivo comprovado no código-fonte real do Mesa 3D e emuladores sobre as causas do esbranquiçamento em *Super Mario Odyssey* (descarte de depth draw calls em shaders assíncronos no emulador + mismatch de registradores CCU no Adreno 825) e da falha de 2160p com 64,5% (~65%) de tela preta (razão geométrica exata entre viewport 720p não escalado e tela 2400x1080 com clipping em `tu6_emit_window_scissor`).
 - **Constituição e Regras (`AGENTS.md` e `LESSONS.md`):** Regra inegociável proibindo categoricamente qualquer declaração de causa-raiz de falha ou comportamento de hardware por suposição teórica ou dedução sem prévia inspeção e comprovação no código-fonte real.
 
 ## [0.2.4] - 2026-11-06

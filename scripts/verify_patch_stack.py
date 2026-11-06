@@ -124,10 +124,10 @@ def verify_gmem_mathematics() -> None:
         vpc_bv_pos_buf_size=16384,
         vpc_attr_buf_size=16384,
         vpc_pos_buf_size=12288,
-        color_cache_size=8 * 1024,
-        depth_cache_size=32 * 1024,
+        color_cache_size=16 * 1024,
+        depth_cache_size=64 * 1024,
     )
-    assert sustained_gmem["usable_gmem"] == 688 * 1024
+    assert sustained_gmem["usable_gmem"] == 528 * 1024
     print(
         f"      OK [Sustained -b / MaxPerf -p]: total_reserved={sustained_gmem['total_reserved'] // 1024} KB, "
         f"usable_gmem={sustained_gmem['usable_gmem'] // 1024} KB"
@@ -140,10 +140,10 @@ def verify_gmem_mathematics() -> None:
         vpc_bv_pos_buf_size=16384,
         vpc_attr_buf_size=16384,
         vpc_pos_buf_size=12288,
-        color_cache_size=8 * 1024,
-        depth_cache_size=16 * 1024,
+        color_cache_size=16 * 1024,
+        depth_cache_size=32 * 1024,
     )
-    assert biggmem["usable_gmem"] == 752 * 1024
+    assert biggmem["usable_gmem"] == 656 * 1024
     print(
         f"      OK [BigGMEM -e / Switch2 -s2]:  total_reserved={biggmem['total_reserved'] // 1024} KB, "
         f"usable_gmem={biggmem['usable_gmem'] // 1024} KB"
