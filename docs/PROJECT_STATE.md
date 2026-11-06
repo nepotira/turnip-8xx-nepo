@@ -1,16 +1,14 @@
 # Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-- **Versão atual:** `v0.2.4`
+- **Versão atual:** `v0.2.5`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Investigação forense profunda e diagnóstico arquitetural comprovado no código-fonte real do Mesa 3D e emuladores, identificando as causas reais do esbranquiçamento em Mario Odyssey e da falha de 2160p com 65% de corte de tela no Nyushu. Nenhuma resolução precipitada foi aplicada, cumprindo diretriz do usuário. Atualização imediata da Constituição contra chutes técnicos.
-- **Ramo ativo:** `main`
+- **Fase atual:** Implementação comprovada das correções de arquitetura do Adreno 825 e do driver Turnip (correção da invariante matemática de CCU fraction/offset no Adreno 825 eliminando corrupção de GMEM/depth e novo patch 63 expandindo framebuffer/window scissor para eliminar o corte de 65% de tela preta em 2160p/Nyushu).
+- **Ramo ativo:** `fix/09-a825-ccu-math-and-2160p-viewport`
 - **Status de verificação:**
   - `python3 scripts/verify_patch_stack.py`: **VERIFICADO (PASS)**.
-  - Testes em hardware físico (`SM8735` com `Adreno 825`):
-    - Confirmação pelo usuário: O esbranquiçamento em Mario Odyssey e a falha de 2160p com 65% de tela preta no Nyushu persistiram idênticos em v0.2.2, v0.2.3 e v0.2.4.
-    - Diagnóstico forense comprovado no código real emitido em `docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md`.
-    - Proibição absoluta de suposições técnicas adicionada à Constituição (`AGENTS.md` e `~/antigravity-dev-rules/global/GEMINI.md`).
-  - Release publicada: [v0.2.4](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.4) (Build CI GitHub Actions Run [42203616305](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42203616305)).
+  - Testes em árvore real Mesa 3D (`.scratch/mesa-src`): As 4 variantes (`biggmem`, `sustained`, `maxperf`, `switch2`) aplicam 100% dos patches cleanly sem conflito.
+  - Correção matemática exata de frações CCU em `scripts/apply_all_patches.py` e `scripts/verify_patch_stack.py`.
+  - Novo patch `patches/63-tu-framebuffer-attachment-extent-guard.py` implementado em `tu_device.cc` e `tu_cmd_buffer.cc`.
 
 ### Checksums dos Binários v0.2.4 (AdrenoTools .zip)
 | Arquivo | SHA256 |

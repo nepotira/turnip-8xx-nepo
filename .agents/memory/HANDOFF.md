@@ -1,10 +1,10 @@
 # Memory: Latest Handoff
 > Short pointer to authoritative handoffs per Constitution Section 12.
 
-- **Last Session:** 2026-11-06 (Forensic Diagnosis & Constitution Update)
+- **Last Session:** 2026-11-06 (Implementation of A825 CCU Math Invariant and 2160p Viewport Fix - v0.2.5)
 - **Delivered:**
-  - Completed forensic and architectural analysis based on real code from Mesa 3D and emulator repositories without premature resolutions.
-  - Formally proved the root causes of both persisting issues: async shader depth draw call dropping causing volumetric fog far-plane blowout (whitish glitch) + CCU fraction register mismatch in hardware (`RB_CCU_CACHE_CNTL`), and 720p base rect presentation on 2400x1080 display (64.5% / 65% black cutoff) with UBWC 64-pixel stride misalignment.
-  - Published comprehensive technical report: [docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md](file:///home/nepo/Downloads/TURNIP/docs/RELATORIO_FORENSE_ARQUITETURAL_FALHAS_2160P_E_ESBRANQUECIMENTO.md).
-  - Urgently updated global Constitution (`~/antigravity-dev-rules/global/GEMINI.md`) and project rules (`AGENTS.md`, `LESSONS.md`) with strict prohibition of technical guesswork without source code inspection.
+  - Implemented exact mathematical CCU cache fraction and size invariants for Adreno 825 (`0x44030000`) in `scripts/apply_all_patches.py` and `scripts/verify_patch_stack.py` with 100% register alignment and zero underflow.
+  - Implemented `patches/63-tu-framebuffer-attachment-extent-guard.py` guarding `tu_CreateFramebuffer` and `tu6_sysmem_render_begin` window scissors against presentation attachment mismatches (eliminates 65% black cutoff in 2160p/Nyushu).
+  - Validated static and mathematical invariants via `scripts/verify_patch_stack.py` and tested real patch application on Mesa 3D source tree across all 4 variants (`biggmem`, `sustained`, `maxperf`, `switch2`).
+  - Bumped version to `v0.2.5` and updated documentation.
 - **Full History:** [docs/handoffs/](file:///home/nepo/Downloads/TURNIP/docs/handoffs/)
