@@ -1,25 +1,20 @@
-# Estado do Projeto (`PROJECT_STATE.md`)
+# Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-**Última atualização:** 2026-11-06  
-**Versão atual:** `0.1.0`  
-**Ramo principal:** `main`  
+- **Versão atual:** `v0.1.0`
+- **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
+- **Fase atual:** Implementação das 4 camadas de patches + Compilação remota via GitHub Actions (`Run 42168099249`) concluídas com sucesso (`Mesa 26.2.0-devel @ 71d0f611`).
+- **Ramo ativo:** `main`
+- **Status de verificação:**
+  - `python3 scripts/verify_patch_stack.py` (validação sintática e matemática de offsets GMEM/CCU para 1 MB na `Adreno 825` e `Adreno 829`): **VERIFICADO (PASS)**.
+  - Compilação completa via GitHub Actions (`build-turnip.yml`, Run `42168099249` com Android NDK r29 sobre `Mesa 26.2.0-devel @ 71d0f611`): **VERIFICADO (PASS — 3 pacotes `.zip` gerados e validados)**.
+  - Testes em hardware físico (`SM8735` / `POCO F7` / `Redmi Turbo 4 Pro`): `not tested` (aguardando execução dos pacotes `.zip` no dispositivo).
 
-## Resumo Executivo
-Projeto de engenharia reversa, auditoria de código e compilação automatizada do driver Vulkan open-source **Mesa Turnip** para GPUs **Qualcomm Adreno 8xx (Gen 8)**, com foco prioritário no **Snapdragon 8s Gen 4 (`SM8735` / `Adreno 825`, `chip_id = 0x44030000`)**.
-
-## O Que Já Está Pronto
-1. **Pesquisa e Auditoria Forense Concluídas (`100%`):**
-   - `RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md`: radiografia da arquitetura fatiada (2 fatias / 4 CCUs / $2\text{ MB}$ de GMEM no Adreno 825) e auditoria de código de mais de 25 repositórios de Turnip modificados.
-   - `PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md`: matriz de triagem de patches e especificação das 4 camadas e 3 variantes (`Sustained -b`, `BigGMEM -e`, `MaxPerf -p`).
-2. **Estrutura de Patches e CI (`100%`):**
-   - Scripts modulares de patch em `scripts/` e patches em `patches/`.
-   - Workflow de compilação em `.github/workflows/build-turnip.yml`.
-
-## Status de Verificação
-- **Verificação estática dos scripts e patches:** verificada localmente (`python3 scripts/verify_patch_stack.py`).
-- **Compilação Android NDK r29 via GitHub Actions:** pronta para disparo via `gh workflow run`.
-- **Execução em hardware físico (`Snapdragon 8s Gen 4 / Adreno 825`):** `not tested` (aguardando geração do artefato `.zip` no GitHub Actions e teste pelo usuário no aparelho).
-
-## Próximos Passos
-1. Subir o repositório para o GitHub via `gh repo create` (ou push para remoto) e disparar o workflow `build-turnip.yml`.
-2. Monitorar a compilação das 3 variantes (`Sustained`, `BigGMEM`, `MaxPerf`) até a conclusão e baixar os pacotes `.zip` AdrenoTools.
+## Entregáveis Concluídos
+1. [RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md](file:///home/nepo/Downloads/TURNIP/RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md) — Auditoria completa de engenharia reversa da arquitetura `Adreno 8xx` (Gen 8 Sliced), do `Snapdragon 8s Gen 4` (`SM8735` / `Adreno 825`) e de mais de 25 forks modificados do Turnip.
+2. [PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md](file:///home/nepo/Downloads/TURNIP/PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md) — Plano de implementação das 4 camadas de correção, matriz de triagem de patches e definição das 3 variantes de compilação.
+3. Stack de patches curada em `patches/` e orquestrador idempotente em [scripts/apply_all_patches.py](file:///home/nepo/Downloads/TURNIP/scripts/apply_all_patches.py).
+4. Workflow de compilação automatizada no GitHub Actions em [.github/workflows/build-turnip.yml](file:///home/nepo/Downloads/TURNIP/.github/workflows/build-turnip.yml).
+5. Pacotes AdrenoTools `.zip` compilados e baixados em `dist/`:
+   - `Turnip-A8xx-8sGen4-Sustained-v0.1.0-71d0f611.zip` (`SHA256: bd20e5303f985b198f496174f894b4f8646a51b9603a0930716772b75df2289c`)
+   - `Turnip-A8xx-8sGen4-BigGMEM-v0.1.0-71d0f611.zip` (`SHA256: 9abb1dc27e008b7b94657996ac5e893f9626870a06b0972297e1a2c8f369a243`)
+   - `Turnip-A8xx-8sGen4-MaxPerf-v0.1.0-71d0f611.zip` (`SHA256: bef77c7cb06676e0d84725d817faf93bcd0a1914688f5387799cbfd13439ad0b`)

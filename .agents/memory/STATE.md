@@ -1,6 +1,5 @@
-# Resumo de Estado (`STATE.md`)
-
-- **Versão atual:** `0.1.0`
-- **Fonte da verdade:** [docs/PROJECT_STATE.md](../../docs/PROJECT_STATE.md)
-- **Estado atual:** Relatório técnico, auditoria de 25+ forks, plano de implementação, stack de patches em 4 camadas e workflow GitHub Actions para as 3 variantes (`Sustained`, `BigGMEM`, `MaxPerf`) implementados.
-- **Testes em hardware real:** `not tested` (aguardando execução da compilação via GitHub Actions).
+# Memória de Estado (`STATE.md`)
+- Fonte da verdade: [docs/PROJECT_STATE.md](file:///home/nepo/Downloads/TURNIP/docs/PROJECT_STATE.md)
+- Versão: `v0.1.0` · Repositório: `https://github.com/nepotira/turnip-8xx-nepo` · Ramo: `main`
+- Compilação GitHub Actions (`Run 42168099249`, `Mesa 26.2.0-devel @ 71d0f611`): **CONCLUÍDA COM SUCESSO** (3 pacotes `.zip` em `dist/`).
+- Testes em hardware físico (`SM8735` / `Adreno 825`): `not tested`.

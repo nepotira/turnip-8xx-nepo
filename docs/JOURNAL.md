@@ -1,10 +1,12 @@
 # Diário do Projeto (`JOURNAL.md`)
 
-## 2026-11-06 — Investigação Profunda, Auditoria de 25+ Forks e Criação da Stack Híbrida v0.1.0
-- **Contexto:** O diretório `/home/nepo/Downloads/TURNIP` iniciou em `2026-11-05` / `2026-11-06` como área de pesquisa sobre a baixa performance e instabilidade dos drivers para GPUs Adreno 8xx (especialmente o Snapdragon 8s Gen 4 / `Adreno 825`). *(registro retroativo: fato ocorrido em 2026-11-06 00:18–01:50; reconstruído em 2026-11-06; confiança alta; evidência: timestamps stat de `RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md` e `PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md` e histórico desta sessão).*
-- **Ações Realizadas:**
-  1. Elaboração do `RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md` e do `PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md`.
-  2. Clonagem e auditoria de código de mais de 25 repositórios e forks comunitários de Turnip (`whitebelyash`, `WinNative-Emu`, `Leb-Sun`, `The412Banner`, `DiskDVD`, `WinterMist010`, `Droid-VM`, `faux123`, `Vauzi-17`, `sherft2607`, `MrPurple666`, `AlexSanz0902`, `Balemuni`, `Frane12`, `s1mptom`, etc.).
-  3. Adoção das regras de desenvolvimento (`bootstrap-projeto.sh`), mantendo `GEMINI.md` apenas localmente via `.gitignore` conforme orientação do usuário.
-  4. Implementação da pilha modular de patches (`patches/` + `scripts/apply_all_patches.py`) e workflow GitHub Actions (`.github/workflows/build-turnip.yml`) para as 3 variantes (`Sustained`, `BigGMEM`, `MaxPerf`).
-- **Status de Testes:** Scripts e invariantes matemáticas verificados localmente; execução do binário em dispositivo físico: `not tested`.
+## 2026-11-06 — Adoção de regras, estruturação da stack v0.1.0 e compilação no GitHub Actions
+- **Contexto:** Após concluir a auditoria técnica exaustiva da arquitetura `Adreno 8xx` (com foco no `Snapdragon 8s Gen 4` / `SM8735` / `Adreno 825`) e de 25+ forks comunitários do Turnip, o projeto passou pelo fluxo `/adotar-regras` (`adocao-retroativa`) e publicação no GitHub (`nepotira/turnip-8xx-nepo`).
+- **Decisões tomadas:**
+  - Manter `GEMINI.md` exclusivamente na pasta local do workspace (`/home/nepo/Downloads/TURNIP/GEMINI.md`) e ignorado no `.gitignore` para nunca ser publicado no GitHub.
+  - Adotar a licença `MIT` (compatível com Mesa 3D) e documentar todos os créditos de terceiros em `THIRD_PARTY_LICENSES.md` e `NOTICE` (ADR-0001).
+  - Estruturar a stack de patches em 4 camadas idempotentes (`scripts/apply_all_patches.py`) e 3 variantes de compilação (`Sustained -b`, `BigGMEM -e`, `MaxPerf -p`).
+- **Evidências de verificação:**
+  - `python3 scripts/verify_patch_stack.py` executado localmente e no CI com sucesso (`PASS`), comprovando matematicamente a ausência de underflow em 1 MB de GMEM na `Adreno 825` (`0 B` de underflow em sysmem; `688 KB` úteis em `Sustained`/`MaxPerf` e `752 KB` úteis em `BigGMEM`) e os offsets de `fd_lrzfc_layout<A8XX>` (`br_cur_buffer = 11264`).
+  - Workflow `build-turnip.yml` executado no GitHub Actions (`Run 42168099249` sobre `Mesa 26.2.0-devel @ 71d0f611` com Android NDK r29): todas as 3 variantes compilaram `libvulkan_freedreno.so` (`vulkan.adreno.so`, `8.714.321 bytes`) e geraram os pacotes `.zip` em `dist/`.
+  - Testes em hardware físico (`SM8735` / `Adreno 825`): `not tested`.
