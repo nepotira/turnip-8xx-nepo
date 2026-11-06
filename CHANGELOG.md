@@ -5,6 +5,17 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-06
+### Fixed
+- **Desacoplamento de Biblioteca e DT_SONAME para `vulkan.nepo.so` (`.github/workflows/build-turnip.yml`):**
+  - Resolvida a colisão crítica de namespace de carregamento dinâmico no Android (`linker64`). Quando emuladores (como o Nyushu) usam Flutter/HWUI, o sistema já carrega `/vendor/lib64/hw/vulkan.adreno.so` com SONAME `vulkan.adreno.so`. Ao carregar um driver customizado com o mesmo SONAME, o Android reutilizava o handle do driver proprietário Qualcomm (`512.800.71`), impedindo silenciosamente que o Turnip fosse executado.
+  - O binário agora é nomeado `vulkan.nepo.so` com `DT_SONAME: vulkan.nepo.so` via `patchelf` e registrado como `"libraryName": "vulkan.nepo.so"` no `meta.json`, eliminando a colisão e garantindo que o Turnip seja carregado no espaço de processo do emulador.
+- **Suporte a Depth Blit Scaling / Resolução 2160p (`patches/64-tu-depth-blit-features.py`):**
+  - Adicionado anúncio explícito de `VK_FORMAT_FEATURE_2_BLIT_SRC_BIT` e `VK_FORMAT_FEATURE_2_BLIT_DST_BIT` para formatos de profundidade (`VK_FORMAT_D32_SFLOAT`, `VK_FORMAT_D24_UNORM_S8_UINT`, `VK_FORMAT_D16_UNORM`) em `tu_physical_device_get_format_properties` (`src/freedreno/vulkan/tu_formats.cc`).
+  - Corrige 64.910 falhas de `BlitScaleHelper: Device does not support scaling format D32_FLOAT` no `vk_texture_cache.cpp` de emuladores baseados em Yuzu/Eden/Uzuy em resoluções 2160p (escala 3X). Anteriormente, a ausência dessa flag impedia o upscale do buffer de profundidade, deixando-o preso em 720p enquanto a cor ia para 2160p ($1280/3840 \approx 33\%$), o que provocava o corte de ~65% da tela e falhas no teste de Z (névoa esbranquiçada e estouro especular).
+- **Cobertura Universal de Driconf para Emuladores Switch (`scripts/apply_all_patches.py`):**
+  - Expandido o perfil de otimizações de Nintendo Switch no `00-turnip-defaults.conf` para incluir correspondência dupla por nome de aplicação (`application_name_match`) e por executável/pacote Android (`executable_regexp`), cobrindo Nyushu (`com.antutu.benchmark.full`, `org.nyushu.*`), Eden / Eden Nepo (`dev.eden.*`, `nepotira/eden-android-optimizations`), Citron (`org.citron.*`), Yuzu (`org.yuzu.*`), Sudachi (`org.sudachi.*`), Suyu (`org.suyu.*`), Ryujinx (`org.ryujinx.*`) e Uzuy (`org.uzuy.*`).
+
 ## [0.2.5] - 2026-11-06
 ### Fixed
 - **Correção da Invariante Matemática CCU no Adreno 825 / SM8735 (`scripts/apply_all_patches.py` e `scripts/verify_patch_stack.py`):**

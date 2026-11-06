@@ -192,8 +192,8 @@ jobs:
           VERSION=$(cat patch-repo/VERSION | tr -d '[:space:]')
           PKG_DIR="pkg-${{ matrix.variant }}"
           mkdir -p "${PKG_DIR}"
-          cp mesa-install/lib/libvulkan_freedreno.so "${PKG_DIR}/vulkan.adreno.so"
-          patchelf --set-soname vulkan.adreno.so "${PKG_DIR}/vulkan.adreno.so"
+          cp mesa-install/lib/libvulkan_freedreno.so "${PKG_DIR}/vulkan.nepo.so"
+          patchelf --set-soname vulkan.nepo.so "${PKG_DIR}/vulkan.nepo.so"
           cp patch-repo/LICENSE patch-repo/NOTICE patch-repo/THIRD_PARTY_LICENSES.md "${PKG_DIR}/"
 
           cat <<EOF > "${PKG_DIR}/meta.json"
@@ -205,13 +205,13 @@ jobs:
             "packageVersion": "${VERSION}${{ matrix.suffix }}",
             "vendor": "Mesa / Freedreno Turnip",
             "driverVersion": "Mesa 26.2.0-devel (${MESA_SHORT_SHA})",
-            "minApi": 31,
-            "libraryName": "vulkan.adreno.so"
+            "minApi": 30,
+            "libraryName": "vulkan.nepo.so"
           }
           EOF
 
           ZIP_NAME="${{ matrix.package_name }}-v${VERSION}-${MESA_SHORT_SHA}.zip"
-          (cd "${PKG_DIR}" && zip -9 "../${ZIP_NAME}" vulkan.adreno.so meta.json LICENSE NOTICE THIRD_PARTY_LICENSES.md)
+          (cd "${PKG_DIR}" && zip -9 "../${ZIP_NAME}" vulkan.nepo.so meta.json LICENSE NOTICE THIRD_PARTY_LICENSES.md)
           ls -lh "${ZIP_NAME}"
 
       - name: Upload AdrenoTools .zip Artifact

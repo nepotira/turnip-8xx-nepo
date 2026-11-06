@@ -58,6 +58,7 @@ ORDERED_PY_PATCHES = [
     "61-a8xx-lrz-bidir-disable.py",
     "62-a8xx-lrz-color-comp-mask.py",
     "63-tu-framebuffer-attachment-extent-guard.py",
+    "64-tu-depth-blit-features.py",
 ]
 
 
@@ -407,8 +408,15 @@ def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
     # VSC binning overflows on 1 MB GMEM GPUs (Adreno 825) that cause 65% black screens.
     driconf = mesa_dir / "src/freedreno/vulkan/00-turnip-defaults.conf"
     app_profiles = """
-        <!-- Nintendo Switch Emulators: Nyushu, Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
-        <application name="Switch Emulators" application_name_match=".*([Ee]den|[Yy]uzu|[Cc]itron|[Ss]udachi|[Ss]uyu|[Rr]yujinx|[Nn]yushu|dev\\.eden|org\\.citron|org\\.yuzu|org\\.nyushu).*">
+        <!-- Nintendo Switch Emulators (by App Name): Nyushu, Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu, Uzuy -->
+        <application name="Switch Emulators (by App Name)" application_name_match=".*([Ee]den|[Yy]uzu|[Cc]itron|[Ss]udachi|[Ss]uyu|[Rr]yujinx|[Nn]yushu|[Uu]zuy|com\\.antutu).*">
+            <option name="tu_independent_icache_miss" value="true" />
+            <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
+            <option name="tu_fix_a2_alpha_precision" value="true" />
+        </application>
+
+        <!-- Nintendo Switch Emulators (by Android Process / Package): Nyushu, Eden Nepo, Citron, Sudachi, Yuzu, Ryujinx, Suyu, Uzuy -->
+        <application name="Switch Emulators (by Process / Package)" executable_regexp=".*([Ee]den|[Yy]uzu|[Cc]itron|[Ss]udachi|[Ss]uyu|[Rr]yujinx|[Nn]yushu|[Uu]zuy|dev\\.eden|org\\.citron|org\\.yuzu|org\\.nyushu|org\\.sudachi|org\\.suyu|org\\.ryujinx|org\\.uzuy|com\\.antutu\\.benchmark\\.full).*">
             <option name="tu_independent_icache_miss" value="true" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
             <option name="tu_fix_a2_alpha_precision" value="true" />
