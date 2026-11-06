@@ -1,5 +1,21 @@
 # Diário do Projeto (`JOURNAL.md`)
 
+## 2026-11-06 — Implementação dos Patches 56/57, Aceleração de Shaders, Correção de Cutscenes, Análise de Hogwarts/MK11 no Switch e Guia de Transplante do Eden (v0.2.1)
+- **Contexto:** Atendimento das novas demandas do usuário:
+  1. Análise profunda e correções para Hogwarts Legacy e Mortal Kombat 11 em suas edições nativas de Nintendo Switch no emulador (Eden/Citron/Yuzu), mantendo as análises de PC intactas.
+  2. Pesquisa profunda e técnicas para acelerar a VELOCIDADE de compilação de shaders para acompanhar o ritmo do jogo sem derrubar o FPS.
+  3. Diagnóstico forense dos bugs de áudio crackelado e macroblocking de vídeo em cutscenes (caso clássico: Mario Odyssey na nave do Bowser com a Peach).
+  4. Garantia e documentação para transplantar 100% de todas as funções implementadas no Eden (`nepotira/eden-android-optimizations`) para qualquer nova base de emulador.
+- **Decisões tomadas:**
+  - Criação do patch `patches/56-a8xx-shader-perf-and-compilation.py` com fast-path wave sizing e inibição de zeramento redundante de memória scratch.
+  - Criação do patch `patches/57-a8xx-switch2-dlss-extensions.py` expondo `VK_KHR_shader_integer_dot_product` (`DP4a`) e `VK_KHR_shader_float16_int8` para aceleração matricial de tensores no Adreno 8xx.
+  - Expansão dos relatórios `RELATORIO_HOGWARTS_MK11_ADRENO8XX.md` e `RELATORIO_EDEN_TURNIP_SWITCH2_SHADERS.md` com as novas seções de Switch e cutscenes.
+  - Criação do `docs/GUIA_TRANSPLANTE_OTIMIZACOES_EMULADOR.md` e do patch unificado `patches/eden-optimizations-unified.patch` contendo 100% das modificações (NEON SIMD, frame pacing sleep e cache flush de 120s).
+  - Atualização do orquestrador `scripts/apply_all_patches.py` e da suíte `scripts/verify_patch_stack.py`.
+- **Evidências de verificação:**
+  - `python3 scripts/verify_patch_stack.py` aprovou 18 patches + 10 scripts Python + módulo aimapper + todas as invariantes de GMEM.
+  - `python3 -m py_compile` em todos os scripts Python executou com sucesso (código 0).
+
 ## 2026-11-06 — Implementação da Variante Switch 2, Relatórios Forenses e Otimização para Shaders e Jogos Pesados (v0.2.0)
 - **Contexto:** Após os testes em hardware real no Snapdragon 8s Gen 4 confirmarem que a nossa build superou com folga o Turnip v38 e o MrPurple v30 (com `BigGMEM` em 1º lugar, `Sustained` em 2º e `Performance` em 3º), o usuário solicitou:
   1. Análise forense de `nepotira/eden-android-optimizations` para explicar o fim do glitch esbranquiçado de Super Mario Odyssey.

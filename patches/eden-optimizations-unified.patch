@@ -1,0 +1,203 @@
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+index 228c2c4..01adfc2 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -64,8 +64,15 @@ using VideoCommon::GenericEnvironment;
+ using VideoCommon::GraphicsEnvironment;
+ 
+ constexpr u32 CACHE_VERSION = 18;
++#ifdef __ANDROID__
++// On mobile devices, frequent driver pipeline cache writes cause significant hitching
++// because vkGetPipelineCacheData locks the internal driver compiler threads.
++constexpr size_t VULKAN_CACHE_FLUSH_PIPELINES = 256;
++constexpr size_t VULKAN_CACHE_FLUSH_MIN_SECONDS = 120;
++#else
+ constexpr size_t VULKAN_CACHE_FLUSH_PIPELINES = 128;
+ constexpr size_t VULKAN_CACHE_FLUSH_MIN_SECONDS = 30;
++#endif
+ constexpr std::array<char, 8> VULKAN_CACHE_MAGIC_NUMBER{'y', 'u', 'z', 'u', 'v', 'k', 'c', 'h'};
+ 
+ template <typename Container>
+@@ -725,10 +732,8 @@ void PipelineCache::LoadDiskResources(u64 title_id, std::stop_token stop_loading
+     workers.WaitForRequests(stop_loading);
+ 
+     if (use_vulkan_pipeline_cache) {
+-        SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+-                                     CACHE_VERSION);
+-        size_t size = 0;
+-        vulkan_pipeline_cache.Read(&size, nullptr);
++        const size_t size = SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename,
++                                                         vulkan_pipeline_cache, CACHE_VERSION);
+         last_cache_size.store(size, std::memory_order_relaxed);
+         last_flush = std::chrono::steady_clock::now();
+     }
+@@ -758,10 +763,8 @@ void PipelineCache::QueueVulkanPipelineCacheFlush() {
+     pipelines_since_flush = 0;
+     last_flush = now;
+     serialization_thread.QueueWork([this] {
+-        SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename, vulkan_pipeline_cache,
+-                                     CACHE_VERSION);
+-        size_t size = 0;
+-        vulkan_pipeline_cache.Read(&size, nullptr);
++        const size_t size = SerializeVulkanPipelineCache(vulkan_pipeline_cache_filename,
++                                                         vulkan_pipeline_cache, CACHE_VERSION);
+         last_cache_size.store(size, std::memory_order_relaxed);
+         flush_in_flight.store(false, std::memory_order_release);
+     });
+@@ -1043,15 +1046,15 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
+     return nullptr;
+ }
+ 
+-void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& filename,
+-                                                 const vk::PipelineCache& pipeline_cache,
+-                                                 u32 cache_version) try {
++size_t PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& filename,
++                                                   const vk::PipelineCache& pipeline_cache,
++                                                   u32 cache_version) try {
+     std::ofstream file(filename, std::ios::binary);
+     file.exceptions(std::ifstream::failbit);
+     if (!file.is_open()) {
+         LOG_ERROR(Common_Filesystem, "Failed to open Vulkan driver pipeline cache file {}",
+                   Common::FS::PathToUTF8String(filename));
+-        return;
++        return 0;
+     }
+     file.write(VULKAN_CACHE_MAGIC_NUMBER.data(), VULKAN_CACHE_MAGIC_NUMBER.size())
+         .write(reinterpret_cast<const char*>(&cache_version), sizeof(cache_version));
+@@ -1068,12 +1071,15 @@ void PipelineCache::SerializeVulkanPipelineCache(const std::filesystem::path& fi
+     LOG_INFO(Render_Vulkan, "Vulkan driver pipelines cached at: {}",
+              Common::FS::PathToUTF8String(filename));
+ 
++    return cache_size;
++
+ } catch (const std::ios_base::failure& e) {
+     LOG_ERROR(Common_Filesystem, "{}", e.what());
+     if (!Common::FS::RemoveFile(filename)) {
+         LOG_ERROR(Common_Filesystem, "Failed to delete Vulkan driver pipeline cache file {}",
+                   Common::FS::PathToUTF8String(filename));
+     }
++    return 0;
+ }
+ 
+ vk::PipelineCache PipelineCache::LoadVulkanPipelineCache(const std::filesystem::path& filename,
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_cache.h b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+index 71dfb46..dd7091c 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.h
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.h
+@@ -140,8 +140,8 @@ private:
+                                                            PipelineStatistics* statistics,
+                                                            bool build_in_parallel);
+ 
+-    void SerializeVulkanPipelineCache(const std::filesystem::path& filename,
+-                                      const vk::PipelineCache& pipeline_cache, u32 cache_version);
++    size_t SerializeVulkanPipelineCache(const std::filesystem::path& filename,
++                                        const vk::PipelineCache& pipeline_cache, u32 cache_version);
+ 
+     vk::PipelineCache LoadVulkanPipelineCache(const std::filesystem::path& filename,
+                                               u32 expected_cache_version);
+diff --git a/src/video_core/renderer_vulkan/vk_scheduler.h b/src/video_core/renderer_vulkan/vk_scheduler.h
+index d4bc8d0..2476312 100644
+--- a/src/video_core/renderer_vulkan/vk_scheduler.h
++++ b/src/video_core/renderer_vulkan/vk_scheduler.h
+@@ -149,14 +149,10 @@ public:
+             frame_counter++;
+             auto target_time = start_time + frame_interval * frame_counter;
+             if (target_time >= now) {
+-                constexpr auto spin_tail = std::chrono::milliseconds(1);
+-                auto sleep_time = target_time - now;
+-                if (sleep_time > spin_tail * 2) {
+-                    std::this_thread::sleep_for(sleep_time - spin_tail);
+-                }
+-                while (std::chrono::steady_clock::now() < target_time) {
+-                    std::this_thread::yield();
+-                }
++                // Non-busy high-precision frame pacing: prevents CPU core saturation,
++                // avoids thermal throttling on ARM big.LITTLE architectures, and ensures
++                // steady frame pacing without starvation of the GPU submission queue.
++                std::this_thread::sleep_until(target_time);
+             } else if (frame_counter > max_frame_count) {
+                 frame_counter = 0;
+                 start_time = now;
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index fea5398..2f073c5 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -200,7 +200,8 @@ bool Swapchain::AcquireNextImage() {
+     };
+ 
+ #ifdef __ANDROID__
+-    if (android_get_device_api_level() >= 30) {
++    if (Settings::values.frame_pacing_mode.GetValue() == Settings::FramePacingMode::Target_Auto &&
++        android_get_device_api_level() >= 30) {
+         scheduler.Wait(resource_ticks[image_index]);
+     } else {
+         wait_with_frame_pacing();
+diff --git a/src/video_core/textures/decoders.cpp b/src/video_core/textures/decoders.cpp
+index 25b0860..48d2d9a 100644
+--- a/src/video_core/textures/decoders.cpp
++++ b/src/video_core/textures/decoders.cpp
+@@ -9,6 +9,10 @@
+ #include <cstring>
+ #include <span>
+ 
++#if defined(__ARM_NEON) || defined(__aarch64__)
++#include <arm_neon.h>
++#endif
++
+ #include "common/alignment.h"
+ #include "common/assert.h"
+ #include "common/bit_util.h"
+@@ -36,6 +40,35 @@ void incrpdep(u32& value) {
+     value = ((value | ~mask) + swizzled_incr) & mask;
+ }
+ 
++template <u32 BYTES_PER_PIXEL>
++inline void CopyPixelBytes(u8* dst, const u8* src) {
++#if defined(__ARM_NEON) || defined(__aarch64__)
++    if constexpr (BYTES_PER_PIXEL == 16) {
++        vst1q_u8(dst, vld1q_u8(src));
++    } else if constexpr (BYTES_PER_PIXEL == 8) {
++        vst1_u8(dst, vld1_u8(src));
++    } else if constexpr (BYTES_PER_PIXEL == 4) {
++        std::memcpy(dst, src, sizeof(u32));
++    } else if constexpr (BYTES_PER_PIXEL == 2) {
++        std::memcpy(dst, src, sizeof(u16));
++    } else if constexpr (BYTES_PER_PIXEL == 1) {
++        *dst = *src;
++    } else {
++        std::memcpy(dst, src, BYTES_PER_PIXEL);
++    }
++#else
++    if constexpr (BYTES_PER_PIXEL == 4) {
++        std::memcpy(dst, src, sizeof(u32));
++    } else if constexpr (BYTES_PER_PIXEL == 2) {
++        std::memcpy(dst, src, sizeof(u16));
++    } else if constexpr (BYTES_PER_PIXEL == 1) {
++        *dst = *src;
++    } else {
++        std::memcpy(dst, src, BYTES_PER_PIXEL);
++    }
++#endif
++}
++
+ template <bool TO_LINEAR, u32 BYTES_PER_PIXEL>
+ void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32 height, u32 depth,
+                  u32 block_height, u32 block_depth, u32 stride) {
+@@ -85,7 +118,7 @@ void SwizzleImpl(std::span<u8> output, std::span<const u8> input, u32 width, u32
+                 u8* const dst = &output[TO_LINEAR ? swizzled_offset : unswizzled_offset];
+                 const u8* const src = &input[TO_LINEAR ? unswizzled_offset : swizzled_offset];
+ 
+-                std::memcpy(dst, src, BYTES_PER_PIXEL);
++                CopyPixelBytes<BYTES_PER_PIXEL>(dst, src);
+             }
+         }
+     }
+@@ -144,7 +177,7 @@ void SwizzleSubrectImpl(std::span<u8> output, std::span<const u8> input, u32 wid
+                 u8* const dst = &output[TO_LINEAR ? swizzled_offset : unswizzled_offset];
+                 const u8* const src = &input[TO_LINEAR ? unswizzled_offset : swizzled_offset];
+ 
+-                std::memcpy(dst, src, BYTES_PER_PIXEL);
++                CopyPixelBytes<BYTES_PER_PIXEL>(dst, src);
+             }
+         }
+         unprocessed_lines -= lines_in_y;

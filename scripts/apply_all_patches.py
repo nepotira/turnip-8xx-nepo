@@ -51,6 +51,8 @@ ORDERED_PY_PATCHES = [
     "52-a8xx-resolve-cr-cntl.py",
     "54-a8xx-sp-hysteresis.py",
     "55-a8xx-sp-hysteresis-gs-hs-ds.py",
+    "56-a8xx-shader-perf-and-compilation.py",
+    "57-a8xx-switch2-dlss-extensions.py",
     "61-a8xx-lrz-bidir-disable.py",
     "62-a8xx-lrz-color-comp-mask.py",
 ]
@@ -410,26 +412,28 @@ def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
     driconf = mesa_dir / "src/freedreno/vulkan/00-turnip-defaults.conf"
     app_profiles = """
         <!-- Nintendo Switch Emulators: Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
-        <application name="Switch Emulators" application_name_match=".*(eden|yuzu|citron|sudachi|suyu|ryujinx).*">
+        <application name="Switch Emulators" application_name_match=".*(eden|yuzu|citron|sudachi|suyu|ryujinx|dev\\.eden|org\\.citron|org\\.yuzu).*">
             <option name="tu_independent_icache_miss" value="true" />
             <option name="tu_autotune_algorithm" value="prefer_gmem" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
             <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
         </application>
 
-        <!-- Hogwarts Legacy (DX12 UE4/5 via VKD3D-Proton) -->
-        <application name="Hogwarts Legacy" application_name_match=".*Hogwarts.*">
+        <!-- Hogwarts Legacy (Switch Edition & PC DX12 Phoenix-Win64-Shipping via VKD3D-Proton) -->
+        <application name="Hogwarts Legacy" application_name_match=".*(Hogwarts|Phoenix).*">
             <option name="tu_autotune_algorithm" value="prefer_sysmem" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
             <option name="tu_enable_ssbo_emulation" value="true" />
             <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
+            <option name="tu_independent_icache_miss" value="true" />
         </application>
 
-        <!-- Mortal Kombat 11 (DX11/DX12 via DXVK/VKD3D-Proton) -->
+        <!-- Mortal Kombat 11 (Switch Edition & PC DX11/DX12 via DXVK/VKD3D-Proton) -->
         <application name="Mortal Kombat 11" application_name_match=".*(MK11|MortalKombat11).*">
             <option name="tu_emulate_alpha_to_coverage" value="true" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />
             <option name="tu_independent_icache_miss" value="true" />
+            <option name="tu_enable_fast_border_color_for_undefined_formats" value="true" />
         </application>
 """
     edit_file_idempotent(

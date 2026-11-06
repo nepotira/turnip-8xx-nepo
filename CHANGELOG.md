@@ -5,7 +5,14 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-11-06
+## [0.2.1] - 2026-11-06
+### Added
+- **Patch `56-a8xx-shader-perf-and-compilation.py`:** Fast-path wave sizing e otimização da alocação de scratch memory para acelerar o throughput do compilador de shaders em tempo real.
+- **Patch `57-a8xx-switch2-dlss-extensions.py`:** Exposição no Vulkan das extensões `VK_KHR_shader_integer_dot_product` (`DP4a`) e `VK_KHR_shader_float16_int8` para aceleração matricial por hardware de modelos neurais (DLSS 5 / Qualcomm SGSR 2) e emulação de Switch 2 (T239/NVN2).
+- **Perfis driconf expandidos:** Cobertura de executáveis de Switch e PC para Hogwarts Legacy (`Phoenix-Win64-Shipping.exe`, `HogwartsLegacy.exe`, `Phoenix`), Mortal Kombat 11 (`MK11.exe`, `MortalKombat11.exe`) e pacotes Android de emuladores (`dev.eden.emulator`, `org.citron.citron_emu`, `org.yuzu.yuzu_emu`).
+- **Guia Completo de Transplante de Funções do Eden (`docs/GUIA_TRANSPLANTE_OTIMIZACOES_EMULADOR.md`):** Inventário minucioso de 100% das otimizações adicionadas ao Eden (`decoders.cpp` ARM NEON SIMD, `vk_scheduler.h` sleep pacing, `vk_pipeline_cache.cpp` 120s flush) e patch unificado pronto (`patches/eden-optimizations-unified.patch`) para migração instantânea para qualquer nova base.
+- **Pesquisa Aprofundada sobre Hogwarts Legacy e Mortal Kombat 11 no Switch:** Seções dedicadas no `RELATORIO_HOGWARTS_MK11_ADRENO8XX.md` cobrindo as edições de console Nintendo Switch rodando em emuladores na Adreno 8xx.
+- **Pesquisa Forense sobre Cutscenes de Mario Odyssey e Velocidade de Shaders:** Seções dedicadas no `RELATORIO_EDEN_TURNIP_SWITCH2_SHADERS.md` cobrindo esvaziamento de ringbuffer no AAudio (estalos de som) e macroblocking visual na cinemática da nave do Bowser.
 ### Added
 - Variante especializada **`Turnip-A8xx-8sGen4-Switch2` (`-s2`)** focada em emulação de Nintendo Switch e Switch 2 (T239/NVN2), com 752 KB de GMEM, `has_attachment_shading_rate` (VRS), `VK_EXT_mesh_shader` acelerado e calibração de histerese de SP balanceada.
 - Perfis de aplicativo dedicados em `00-turnip-defaults.conf` para emuladores de Switch (`Eden`, `Citron`, `Sudachi`, `Yuzu`, `Ryujinx`), `Hogwarts Legacy` e `Mortal Kombat 11`.

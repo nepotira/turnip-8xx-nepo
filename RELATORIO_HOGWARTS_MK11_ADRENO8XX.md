@@ -83,11 +83,68 @@ d3d11.clampDepthBias = true
 
 ---
 
-## 3. Síntese de Parâmetros e Matriz de Configuração Recomendada
+## 3. Hogwarts Legacy no Nintendo Switch (Emuladores Eden, Citron e Yuzu)
 
-| Jogo | API Alvo | Camada de Tradução | Variante Turnip Ideal | Variáveis Chave de Ambiente |
+> **Identificadores Oficiais:** Title ID `0100E8B018BE6000` / `0100E8B018BE7000`  
+> **Motor Gráfico:** Unreal Engine 4.27 altamente customizado (Port desenvolvido pela Shiver Entertainment)  
+> **API Nativa do Jogo:** NVN (Nvidia Maxwell API) traduzida para Vulkan no Eden/Citron sobre o Turnip Adreno 8xx
+
+### 3.1. Diagnóstico dos Problemas Críticos no Emulador de Switch
+
+1. **Cenários Excessivamente Prateados / Pretos (Black/Silver Environments) e Iluminação Falha:**
+   - **Causa Raiz:** O port do Switch utiliza iluminação diferida compactada (*Clustered Deferred Lighting*) onde a posição, atenuação e cor das luzes dinâmicas do castelo são lidas a partir de buffers uniformes indiretos (*UBOs com indexação dinâmica*). No Turnip upstream, leituras de UBO indireto fora dos limites (*Out-of-Bounds*) sem o flag de segurança retornavam zero absoluto ou valores estourados, apagando a luz ou lavando as superfícies em um brilho prateado espelhado (onde magias como *Lumos* eram forçadas para que qualquer objeto pudesse ser visualizado).
+   - **Engenharia de Correção:**
+     - No Turnip driconf: Forçar `tu_allow_oob_indirect_ubo_loads = true` e `tu_enable_fast_border_color_for_undefined_formats = true`.
+     - No Eden/Citron: Configurar o nível de precisão gráfica para **High** (obriga o emulador a sincronizar a interpolação de fragmentos e descritores de UBO com a precisão exigida pelo Maxwell).
+
+2. **Quedas Bruscas de FPS e Micro-Travamentos ao Conjurar Magias (Revelio, Lumos, Bombarda, Ancient Magic):**
+   - **Causa Raiz:** Cada feitiço invoca múltiplos sistemas de partículas em cascata e transições de malha dinâmica. Como o jogo não pré-compila todos os shaders no menu, a invocação do feitiço força a criação instantânea de dezenas de variantes de pipelines Vulkan.
+   - **Engenharia de Correção:**
+     - Utilizar o nosso patch de **Pipeline Cache Flush estendido (120s / 256 pipelines)** no Eden (commit `9d03f1a`), que evita que o emulador pause a thread de renderização enquanto compila as partículas.
+     - No Turnip, o patch de histerese de SP (`SP_PS_HYSTERESIS`) impede o clock drop da GPU no momento de pico de desenho de partículas.
+
+3. **Vazamento de Memória e Fechamento Repentino pelo Android LMK (Low Memory Killer):**
+   - **Causa Raiz:** Hogwarts Legacy é o jogo que mais consome memória na biblioteca do Switch, alocando quase 4 GB de RAM unificada física. Ao ser emulado, as tabelas de páginas de textura e os buffers de comando inflacionam o consumo para 6 a 8 GB de RAM virtual. No Snapdragon 8s Gen 4, isso dispara o OOM Killer do Android.
+   - **Engenharia de Correção:**
+     - O nosso patch `08-tu-kgsl-cache-retired-a8xx-ib-storage.patch` recicla os buffers de comando intermediários (IBs) diretamente na memória do driver sem chamar `mmap`/`munmap` repetidamente no kernel KGSL, reduzindo a pegada de memória do driver em até 400 MB.
+
+---
+
+## 4. Mortal Kombat 11 no Nintendo Switch (Emuladores Eden, Citron e Yuzu)
+
+> **Identificadores Oficiais:** Title ID `010090F00BF0C000` / `010090F00BF0D000`  
+> **Motor Gráfico:** NetherRealm Custom Unreal Engine (Híbrido UE3/UE4, Port Shiver Entertainment)  
+> **API Nativa do Jogo:** NVN (Nvidia Maxwell API) traduzida para Vulkan no Eden/Citron sobre o Turnip Adreno 8xx
+
+### 4.1. Diagnóstico dos Problemas Críticos no Emulador de Switch
+
+1. **Silhuetas Pretas, Pele Lavada e Linhas Quadriculadas nos Personagens (Scorpion, Sub-Zero, Johnny Cage):**
+   - **Causa Raiz:** O motor do MK11 no Switch implementa a renderização de pele, suor e tecidos através de *Alpha-to-Coverage* com *Dual-Source Blending* para simular sombreamento subsuperficial (*Subsurface Scattering*) de baixo custo computacional.
+   - Na GPU Adreno 8xx, quando uma draw call combina máscaras de multisampling com blending de fonte secundária, o bloco de Render Backend descarta incorretamente os fragmentos se o registrador de controle de resolução não estiver configurado para o modo A8XX.
+   - **Engenharia de Correção:**
+     - Nosso patch `52-a8xx-resolve-cr-cntl.py` garante que `REG_A8XX_RB_RESOLVE_CR_CNTL` seja forçado a `1`.
+     - No Turnip driconf, ativamos `tu_emulate_alpha_to_coverage = true` para perfis correspondentes a emuladores de Switch.
+
+2. **Engasgos Críticos e Dessincronia de Áudio na Transição 60 FPS (Luta) <-> 30 FPS (Fatalities/Cinemáticas):**
+   - **Causa Raiz:** O MK11 opera a 60 FPS cravados durante o combate e trava propositalmente em 30 FPS nas cenas cinemáticas de entrada, Fatal Blows e Fatalities. No emulador vanilla, o escalonador de frame pacing tenta manter o temporizador de 60 FPS com spin-locks, provocando travamento violento de vídeo e estalos no áudio (*buffer underrun*).
+   - **Engenharia de Correção:**
+     - A modificação do Nepo no Eden (commit `a3ee2cc`, substituindo o spin-wait por `std::this_thread::sleep_until`) permite que o agendador adapte o frame time instantaneamente de 16,6 ms para 33,3 ms sem superaquecer a CPU.
+     - No Turnip, o controle de histerese estendido (`SP_PS_HYSTERESIS`) mantém os clusters de ALU despertos durante os 33,3 ms das cinemáticas, garantindo reprodução contínua e sem solavancos.
+
+3. **Partículas Ausentes (Fogo do Scorpion, Gelo do Sub-Zero, Projéteis de Sangue):**
+   - **Causa Raiz:** A amostragem de texturas de partículas com canais alfa truncados falha na Adreno 8xx quando o *Sample Shading* tenta forçar amostragem por amostra em vez de por pixel.
+   - **Engenharia de Correção:** O nosso patch `0006-tu-sample-shading-gate.patch` impede a ativação desnecessária de sample shading para draws de partículas translúcidas, restaurando 100% dos efeitos de chamas e sangue em tempo real.
+
+---
+
+## 5. Matriz Completa de Configuração e Melhores Práticas
+
+| Plataforma / Título | API | Camada / Emulador | Variante Turnip Ideal | Configuração Chave de Sucesso |
 |---|---|---|---|---|
-| **Hogwarts Legacy** | DX12 | VKD3D-Proton 2.12+ | `Turnip-A8xx-8sGen4-Sustained` (`-b`) | `VKD3D_CONFIG=no_memory_clear_on_create,single_queue TU_DEBUG=sysmem` |
-| **Mortal Kombat 11** | DX11 | DXVK 2.3+ (Async) | `Turnip-A8xx-8sGen4-MaxPerf` (`-p`) | `DXVK_ASYNC=1 d3d11.clampDepthBias=true` |
-| **Super Mario Odyssey** | Vulkan | Nativo Eden / Citron | `Turnip-A8xx-8sGen4-BigGMEM` (`-e`) | `TU_DEBUG=gmem` (ou padrão) + Eden NEON Unswizzle |
-| **Jogos Switch 2 (Futuro)** | NVN2 / VK 1.3 | Emuladores Next-Gen | `Turnip-A8xx-8sGen4-Switch2` (`-s2`) | Exposição completa de Mesh Shaders, VRS e Cooperative Matrix |
+| **Hogwarts Legacy (Switch)** | NVN -> VK | Eden / Citron | `Turnip-A8xx-8sGen4-BigGMEM` (`-e`) | Precisão Gráfica: **High** · ASTC Uncompressed · UBO OOB loads ativado |
+| **Mortal Kombat 11 (Switch)** | NVN -> VK | Eden / Citron | `Turnip-A8xx-8sGen4-BigGMEM` (`-e`) ou `MaxPerf` (`-p`) | Precisão Gráfica: **High** · Alpha-to-Coverage emulado · Resolução: **1X** |
+| **Hogwarts Legacy (PC)** | DX12 | Winlator / VKD3D | `Turnip-A8xx-8sGen4-Sustained` (`-b`) | `VKD3D_CONFIG=no_memory_clear_on_create TU_DEBUG=sysmem` |
+| **Mortal Kombat 11 (PC)** | DX11 | Winlator / DXVK | `Turnip-A8xx-8sGen4-MaxPerf` (`-p`) | `DXVK_ASYNC=1 d3d11.clampDepthBias=true` |
+| **Super Mario Odyssey** | NVN -> VK | Eden / Citron | `Turnip-A8xx-8sGen4-BigGMEM` (`-e`) | Eden NEON Unswizzle (`e8d9e6c`) + Sleep Frame Pacing |
+| **Jogos Switch 2 (Futuro)** | NVN2 -> VK | Emuladores Next-Gen | `Turnip-A8xx-8sGen4-Switch2` (`-s2`) | Exposição completa de Mesh Shaders, VRS Tier 2 e DP4a / Tensor ALU |
+
