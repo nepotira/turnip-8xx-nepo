@@ -1,10 +1,10 @@
 # Memory: Latest Handoff
 > Short pointer to authoritative handoffs per Constitution Section 12.
 
-- **Last Session:** 2026-11-06 (v0.2.2)
+- **Last Session:** 2026-11-06 (v0.2.3)
 - **Delivered:**
-  - Implemented Patch 58 (`58-a8xx-conservative-rast.py`): Conservative rasterization binning for A8XX.
-  - Implemented Patch 59 (`59-a8xx-ir3-coalesce-ubo-push-ranges.py`): UBO push ranges coalescing in IR3 for Adreno 825 & 829.
-  - Integrated into `scripts/apply_all_patches.py` and verified by `scripts/verify_patch_stack.py`.
-  - Triggered GitHub Actions CI build across all 4 driver variants.
+  - Diagnosed and resolved the 65% unrendered black screen bug by reverting conservative binning on A8XX (`tu_binning_conservative_rast` -> `CHIP == A7XX`).
+  - Implemented native driver fix for whitish elements (`patches/60-a8xx-sanitize-frag-nan.py`), replacing NaNs with 0.0 and clamping infinities in fragment color outputs.
+  - Added explicit Nyushu matching in `00-turnip-defaults.conf` application profiles.
+  - Bumped version to `0.2.3` and verified with all static and math test suites.
 - **Full History:** [docs/handoffs/](file:///home/nepo/Downloads/TURNIP/docs/handoffs/)

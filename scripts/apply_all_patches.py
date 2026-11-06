@@ -53,8 +53,8 @@ ORDERED_PY_PATCHES = [
     "55-a8xx-sp-hysteresis-gs-hs-ds.py",
     "56-a8xx-shader-perf-and-compilation.py",
     "57-a8xx-switch2-dlss-extensions.py",
-    "58-a8xx-conservative-rast.py",
     "59-a8xx-ir3-coalesce-ubo-push-ranges.py",
+    "60-a8xx-sanitize-frag-nan.py",
     "61-a8xx-lrz-bidir-disable.py",
     "62-a8xx-lrz-color-comp-mask.py",
 ]
@@ -413,8 +413,8 @@ def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
     # Layer 4B: Driconf profiles for Switch emulators, Hogwarts Legacy, and Mortal Kombat 11
     driconf = mesa_dir / "src/freedreno/vulkan/00-turnip-defaults.conf"
     app_profiles = """
-        <!-- Nintendo Switch Emulators: Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
-        <application name="Switch Emulators" application_name_match=".*(eden|yuzu|citron|sudachi|suyu|ryujinx|dev\\.eden|org\\.citron|org\\.yuzu).*">
+        <!-- Nintendo Switch Emulators: Nyushu, Eden, Citron, Sudachi, Yuzu, Ryujinx, Suyu -->
+        <application name="Switch Emulators" application_name_match=".*([Ee]den|[Yy]uzu|[Cc]itron|[Ss]udachi|[Ss]uyu|[Rr]yujinx|[Nn]yushu|dev\\.eden|org\\.citron|org\\.yuzu|org\\.nyushu).*">
             <option name="tu_independent_icache_miss" value="true" />
             <option name="tu_autotune_algorithm" value="prefer_gmem" />
             <option name="tu_allow_oob_indirect_ubo_loads" value="true" />

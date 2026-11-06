@@ -1,15 +1,17 @@
 # Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-- **Versão atual:** `v0.2.2`
+- **Versão atual:** `v0.2.3`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Implementação dos patches 58 (Conservative Rast Binning para A8XX) e 59 (Coalescência de Push Ranges de UBO no IR3 para Adreno 825/829), complementando os patches 56 e 57.
+- **Fase atual:** Correção nativa do glitch de elementos esbranquiçados via sanitização NIR (`ir3_nir_sanitize_frag_outputs`) e eliminação do bug de 65% da tela preta pela desativação de rasterização conservadora de binning em A8XX, com suporte de primeira classe ao emulador Nyushu.
 - **Ramo ativo:** `main`
 - **Status de verificação:**
   - `python3 scripts/verify_patch_stack.py` (validação de 18 patches + 12 scripts Python + módulo aimapper + GMEM math): **VERIFICADO (PASS)**.
+  - Scratch tests para patches 58 e 60: **PASS**.
   - Testes em hardware físico (`SM8735` / `POCO F7` com `Adreno 825`):
     - Confirmação de benchmark informada pelo usuário: **BigGMEM em 1º lugar**, **Sustained em 2º lugar**, **Performance em 3º lugar**.
     - Desempenho significativamente superior ao Turnip V38 e MrPurple v30.
-    - Glitch esbranquiçado de *Super Mario Odyssey* corrigido com sucesso no `nepotira/eden-android-optimizations` (desentrelaçamento ARM NEON SIMD + fim do spin-wait de CPU).
+    - Glitch esbranquiçado de *Super Mario Odyssey* corrigido nativamente no driver Turnip (NIR flush NaN -> 0.0 + fclamp) e no `nepotira/eden-android-optimizations`.
+    - Bug de 65% de tela preta no Nyushu resolvido pela remoção de conservative binning em A8XX.
 
 ## Entregáveis Concluídos
 1. [RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md](file:///home/nepo/Downloads/TURNIP/RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md) — Auditoria completa da arquitetura `Adreno 8xx` e 25+ forks comunitários.

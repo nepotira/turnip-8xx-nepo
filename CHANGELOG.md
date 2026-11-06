@@ -5,6 +5,13 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-06
+### Fixed
+- **Correção da tela 65% preta / não renderizada:** Removida a ativação de `tu_binning_conservative_rast` em Adreno 8xx (`58-a8xx-conservative-rast.py`), restaurando estritamente `CHIP == A7XX`. No Adreno 8xx, a rasterização conservadora de binning provocava o corte da bounding box ao tamanho do buffer interno de 720p (`1280x720`) em telas de `2400x1080` (`(1280*720)/(2400*1080) = 35.5%`, resultando em exatamente 64.5% ≈ 65% da tela preta na apresentação).
+- **Correção nativa do glitch de elementos esbranquiçados (`patches/60-a8xx-sanitize-frag-nan.py`):** Adicionado passe no compilador NIR/IR3 (`ir3_nir_sanitize_frag_outputs`) durante `ir3_finalize_nir` para sanitizar saídas de cor de fragment shaders float16 e float32. Valores `NaN` (gerados por amostragens de texturas com bordas não inicializadas em emuladores sem o patch SIMD do Eden) são substituídos por `0.0` via `nir_bcsel(nir_fisnan(src), 0.0, src)` e valores infinitos são limitados por `nir_fclamp`, impedindo que estourem em saturação branca pura no hardware Adreno 8xx em passes de névoa volumétrica e bloom (ex.: *Super Mario Odyssey*).
+- **Suporte explícito ao emulador Nyushu:** Adicionado `[Nn]yushu` e `org.nyushu` ao perfil `Switch Emulators` no `00-turnip-defaults.conf`, ativando automaticamente `tu_independent_icache_miss`, `tu_autotune_algorithm=prefer_gmem`, `tu_allow_oob_indirect_ubo_loads` e `tu_enable_fast_border_color_for_undefined_formats`.
+
+
 ## [0.2.2] - 2026-11-06
 ### Added
 - **Patch `58-a8xx-conservative-rast.py`:** Ativação de rasterização conservadora para binning com fragment density maps / VRS em `CHIP >= A7XX` (incluindo Adreno 8xx), reduzindo processamento de vértices em passes de sombreamento de taxa variável.

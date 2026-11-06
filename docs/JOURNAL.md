@@ -40,3 +40,11 @@
 ## 2026-11-06 — Adoção de regras, estruturação da stack v0.1.0 e compilação no GitHub Actions
 - **Contexto:** Adoção de regras e publicação no GitHub (`nepotira/turnip-8xx-nepo`).
 - **Evidências:** Compilação das variantes `Sustained`, `BigGMEM` e `MaxPerf` no GitHub Actions (`Run 42168099249`) concluída com 100% de sucesso.
+
+## [2026-11-06] - Correção do Bug de 65% de Tela Preta e Glitch Esbranquiçado Nativo no Driver (v0.2.3)
+- **Diagnóstico da Tela 65% Preta:** No patch 58 (`58-a8xx-conservative-rast.py`), a extensão de `tu_binning_conservative_rast` para `CHIP >= A7XX` ativou a rasterização conservadora de binning em A8XX. Em emuladores de Switch (Nyushu) e resoluções com upscaling de apresentação (720p interno `1280x720` em telas `2400x1080`), o hardware rasterizador conservador da Adreno 8xx cortou a bounding box exatamente no viewport 720p: `(1280*720)/(2400*1080) = 35.5%`, deixando exatamente `64.5% ≈ 65%` da tela preta.
+- **Ação 1:** O patch 58 foi revertido/removido para manter estritamente `CHIP == A7XX`.
+- **Diagnóstico dos Elementos Esbranquiçados:** Em emuladores sem o patch ARM NEON SIMD do Eden (como o Nyushu), leituras de borda de textura e amostragem fora de limites geram valores `NaN` e `+Inf`. Em passes de HDR, névoa e bloom (ex.: Super Mario Odyssey), o `NaN` propaga-se e satura na Adreno 8xx para branco puro (`0xFF, 0xFF, 0xFF`).
+- **Ação 2 (`patches/60-a8xx-sanitize-frag-nan.py`):** Criado passe NIR `ir3_nir_sanitize_frag_outputs` durante `ir3_finalize_nir` que substitui `NaN` por `0.0` e grampeia infinitos via `nir_fclamp` em saídas de cor (`nir_intrinsic_store_output`), deixando render targets inteiros intactos.
+- **Ação 3:** Inclusão de `[Nn]yushu` e `org.nyushu` nos perfis de emulador do `00-turnip-defaults.conf`.
+- **Verificação:** `python3 scripts/verify_patch_stack.py` e testes unitários em `scratch/test_patches_60_58.py` passaram com 100% de sucesso.
