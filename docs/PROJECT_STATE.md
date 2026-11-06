@@ -12,15 +12,15 @@
     - Desempenho significativamente superior ao Turnip V38 e MrPurple v30.
     - Glitch esbranquiçado de *Super Mario Odyssey* corrigido nativamente no driver Turnip (NIR flush NaN -> 0.0 + fclamp) e no `nepotira/eden-android-optimizations`.
     - Bug de 65% de tela preta no Nyushu resolvido pela remoção de conservative binning em A8XX.
-  - Release publicada: [v0.2.3](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.3) (Build CI GitHub Actions Run [42190315660](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42190315660)).
+  - Release publicada: [v0.2.4](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.4) (Build CI GitHub Actions Run [42203616305](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42203616305)).
 
-### Checksums dos Binários v0.2.3 (AdrenoTools .zip)
+### Checksums dos Binários v0.2.4 (AdrenoTools .zip)
 | Arquivo | SHA256 |
 | :--- | :--- |
-| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.3-35a0fef1.zip` | `ebfe76cc13c1c72f72ec6b7708c1123b88afdb3bf093ee68f9b221f7e57d0305` |
-| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.3-35a0fef1.zip` | `76c19eb4d3ac6a86b65e94a189d7c0782ea35df4b6b1f5704adda11d08f1abad` |
-| `Turnip-A8xx-8sGen4-Sustained-v0.2.3-35a0fef1.zip` | `3d5f30116e62c0e71e0b33a4748bf27f59552caeb84a283bd69b9ae0bee1df3a` |
-| `Turnip-A8xx-8sGen4-Switch2-v0.2.3-35a0fef1.zip` | `8cf91d266b3358b50010646a35a69f249fb7ff4cce5109c95d4956750a36afd6` |
+| `Turnip-A8xx-8sGen4-BigGMEM-v0.2.4-35a0fef1.zip` | `92356fc5d274ad6ba44f61a8a8fb7b8fd8043d31d6f4cd2e95c5385160c76a86` |
+| `Turnip-A8xx-8sGen4-MaxPerf-v0.2.4-35a0fef1.zip` | `698b22cd9599a97f5b870446f3086831a16087302a083f79f2527f36e1004d13` |
+| `Turnip-A8xx-8sGen4-Sustained-v0.2.4-35a0fef1.zip` | `75ff5aac43a45653e04aa0f9f211e2798e44233956c0e64cd283800777407452` |
+| `Turnip-A8xx-8sGen4-Switch2-v0.2.4-35a0fef1.zip` | `07f68c275c374864a008cfa9ee2814df605c5fc7caae2d58dc0cee009167c21f` |
 
 
 ## Entregáveis Concluídos
