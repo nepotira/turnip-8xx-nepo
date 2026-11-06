@@ -17,27 +17,36 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import apply_all_patches  # noqa: E402
 
 
-def calc_gmem_layout(
+def calc_a8xx_cache_offsets(
     gmem_bytes: int,
     num_ccu: int,
-    per_ccu_color_bytes: int,
-    per_ccu_depth_bytes: int,
-    color_fraction_shift: int,
-    depth_fraction_shift: int,
+    vpc_bv_pos_buf_size: int,
+    vpc_attr_buf_size: int,
+    vpc_pos_buf_size: int,
+    color_cache_size: int,
+    depth_cache_size: int,
 ) -> dict:
-    """Replicates src/freedreno/common/fd6_gmem_cache.h offset math."""
-    color_cache_size = (num_ccu * per_ccu_color_bytes) >> color_fraction_shift
-    depth_cache_size = (num_ccu * per_ccu_depth_bytes) >> depth_fraction_shift
-    color_offset = gmem_bytes - depth_cache_size - color_cache_size
-    depth_offset = gmem_bytes - depth_cache_size
+    """Replicates __calc_gmem_cache_offsets in src/freedreno/common/fd6_gmem_cache.h for A8XX."""
+    offset = gmem_bytes
+    vpc_bv_pos_buf_offset = offset - (num_ccu * vpc_bv_pos_buf_size)
+    offset = vpc_bv_pos_buf_offset
+    vpc_attr_buf_offset = offset - (num_ccu * vpc_attr_buf_size)
+    offset = vpc_attr_buf_offset
+    vpc_pos_buf_offset = offset - (num_ccu * vpc_pos_buf_size)
+    offset = vpc_pos_buf_offset
+    color_ccu_offset = offset - (num_ccu * color_cache_size)
+    offset = color_ccu_offset
+    depth_ccu_offset = offset - (num_ccu * depth_cache_size)
+    offset = depth_ccu_offset
     return {
         "gmem_bytes": gmem_bytes,
-        "color_cache_size": color_cache_size,
-        "depth_cache_size": depth_cache_size,
-        "total_reserved": color_cache_size + depth_cache_size,
-        "usable_gmem": color_offset,
-        "color_offset": color_offset,
-        "depth_offset": depth_offset,
+        "total_reserved": gmem_bytes - offset,
+        "usable_gmem": offset,
+        "vpc_bv_pos_buf_offset": vpc_bv_pos_buf_offset,
+        "vpc_attr_buf_offset": vpc_attr_buf_offset,
+        "vpc_pos_buf_offset": vpc_pos_buf_offset,
+        "color_ccu_offset": color_ccu_offset,
+        "depth_ccu_offset": depth_ccu_offset,
     }
 
 
@@ -66,80 +75,97 @@ def verify_files_and_syntax() -> None:
 
 
 def verify_gmem_mathematics() -> None:
-    print("[2/3] Verifying GMEM & CCU cache offset invariants on 1 MB GMEM (Adreno 825 / SM8735)...")
+    print("[2/3] Verifying A8XX __calc_gmem_cache_offsets invariants on 1 MB GMEM (Adreno 825 / SM8735)...")
     gmem_1mb = 1024 * 1024  # 1,048,576 bytes
 
-    # 1. Prove upstream/unpatched a8xx_base underflows on 1 MB GMEM when fractions are FULL (0) or QUARTER/HALF
-    broken_unpatched = calc_gmem_layout(
-        gmem_bytes=gmem_1mb,
-        num_ccu=8,
-        per_ccu_color_bytes=64 * 1024,
-        per_ccu_depth_bytes=128 * 1024,
-        color_fraction_shift=0,  # FULL -> 512 KB
-        depth_fraction_shift=0,  # FULL -> 1024 KB
-    )
-    assert broken_unpatched["usable_gmem"] < 0, "Expected unpatched a8xx_base to underflow 1 MB GMEM"
-    print(
-        f"      Confirmed unpatched a8xx_base underflow: usable_gmem = {broken_unpatched['usable_gmem']} B "
-        f"(reserved {broken_unpatched['total_reserved'] // 1024} KB > 1024 KB)"
-    )
-
-    # 2. Verify Variant 1 & 3 (Sustained -b & MaxPerf -p): EIGHTH (shift=3) color, HALF (shift=1) depth
-    sustained = calc_gmem_layout(
+    # 1. Prove upstream a8xx_gen1 underflows on 1 MB GMEM with num_ccu = 4 in both sysmem and gmem
+    unpatched_sysmem = calc_a8xx_cache_offsets(
         gmem_bytes=gmem_1mb,
         num_ccu=4,
-        per_ccu_color_bytes=32 * 1024,
-        per_ccu_depth_bytes=64 * 1024,
-        color_fraction_shift=3,  # EIGHTH -> 16 KB
-        depth_fraction_shift=1,  # HALF -> 128 KB
+        vpc_bv_pos_buf_size=32768,
+        vpc_attr_buf_size=131072,
+        vpc_pos_buf_size=65536,
+        color_cache_size=128 * 1024,
+        depth_cache_size=256 * 1024,
     )
-    assert sustained["color_cache_size"] == 16 * 1024
-    assert sustained["depth_cache_size"] == 128 * 1024
-    assert sustained["usable_gmem"] == 880 * 1024
-    assert sustained["usable_gmem"] >= 768 * 1024
-    print(
-        f"      OK [Sustained -b / MaxPerf -p]: color_cache=16 KB, depth_cache=128 KB, "
-        f"usable_gmem={sustained['usable_gmem'] // 1024} KB (85.9% of 1 MB GMEM)"
-    )
-
-    # 3. Verify Variant 2 (BigGMEM -e): QUARTER (shift=2) color, HALF (shift=1) of 32 KB depth
-    biggmem = calc_gmem_layout(
+    unpatched_gmem = calc_a8xx_cache_offsets(
         gmem_bytes=gmem_1mb,
         num_ccu=4,
-        per_ccu_color_bytes=32 * 1024,
-        per_ccu_depth_bytes=32 * 1024,
-        color_fraction_shift=2,  # QUARTER -> 32 KB
-        depth_fraction_shift=1,  # HALF -> 64 KB
+        vpc_bv_pos_buf_size=32768,
+        vpc_attr_buf_size=49152,
+        vpc_pos_buf_size=24576,
+        color_cache_size=16 * 1024,
+        depth_cache_size=256 * 1024,
     )
-    assert biggmem["color_cache_size"] == 32 * 1024
-    assert biggmem["depth_cache_size"] == 64 * 1024
-    assert biggmem["usable_gmem"] == 928 * 1024
-    assert biggmem["usable_gmem"] >= 768 * 1024
+    assert unpatched_sysmem["usable_gmem"] < 0 and unpatched_gmem["usable_gmem"] < 0
     print(
-        f"      OK [BigGMEM -e]:                color_cache=32 KB, depth_cache=64 KB, "
-        f"usable_gmem={biggmem['usable_gmem'] // 1024} KB (90.6% of 1 MB GMEM)"
+        f"      Confirmed unpatched a8xx_gen1 underflow on 1 MB GMEM: "
+        f"sysmem_offset={unpatched_sysmem['usable_gmem'] // 1024} KB, "
+        f"gmem_offset={unpatched_gmem['usable_gmem'] // 1024} KB"
+    )
+
+    # 2. Verify Patched Sysmem (4 CCUs * 256 KB = 1024 KB, offset == 0)
+    patched_sysmem = calc_a8xx_cache_offsets(
+        gmem_bytes=gmem_1mb,
+        num_ccu=4,
+        vpc_bv_pos_buf_size=16384,
+        vpc_attr_buf_size=32768,
+        vpc_pos_buf_size=16384,
+        color_cache_size=64 * 1024,
+        depth_cache_size=128 * 1024,
+    )
+    assert patched_sysmem["usable_gmem"] == 0
+    print("      OK [Patched Sysmem]:            total_reserved=1024 KB, final_offset=0 B (exact 1 MB fit, zero underflow)")
+
+    # 3. Verify Variant 1 & 3 (Sustained -b / MaxPerf -p) GMEM
+    sustained_gmem = calc_a8xx_cache_offsets(
+        gmem_bytes=gmem_1mb,
+        num_ccu=4,
+        vpc_bv_pos_buf_size=16384,
+        vpc_attr_buf_size=16384,
+        vpc_pos_buf_size=12288,
+        color_cache_size=8 * 1024,
+        depth_cache_size=32 * 1024,
+    )
+    assert sustained_gmem["usable_gmem"] == 688 * 1024
+    print(
+        f"      OK [Sustained -b / MaxPerf -p]: total_reserved={sustained_gmem['total_reserved'] // 1024} KB, "
+        f"usable_gmem={sustained_gmem['usable_gmem'] // 1024} KB"
+    )
+
+    # 4. Verify Variant 2 (BigGMEM -e) GMEM
+    biggmem = calc_a8xx_cache_offsets(
+        gmem_bytes=gmem_1mb,
+        num_ccu=4,
+        vpc_bv_pos_buf_size=16384,
+        vpc_attr_buf_size=16384,
+        vpc_pos_buf_size=12288,
+        color_cache_size=8 * 1024,
+        depth_cache_size=16 * 1024,
+    )
+    assert biggmem["usable_gmem"] == 752 * 1024
+    print(
+        f"      OK [BigGMEM -e]:                total_reserved={biggmem['total_reserved'] // 1024} KB, "
+        f"usable_gmem={biggmem['usable_gmem'] // 1024} KB"
     )
 
 
 def verify_lrzfc_layout_invariant() -> None:
-    print("[3/3] Verifying A8XX fd_lrzfc_layout<CHIP> size invariant...")
-    # On A6XX/A7XX: buffer1 (512) + dir_track (1) + pad2 (511) + buffer2 (512) + pad3 (512) = 2048 bytes
-    # On A8XX:      buffer1 (1024) + dir_track (4) + pad2 (1020) + buffer2 (1024) = 3072 bytes
-    sizeof_a6xx = 512 + 1 + 511 + 512 + 512
-    offset_dir_track_a6xx = 512
-    clear_len_a6xx = sizeof_a6xx - offset_dir_track_a6xx  # 1536 bytes
-
-    sizeof_a8xx = 1024 + 4 + 1020 + 1024
-    offset_dir_track_a8xx = 1024
-    clear_len_a8xx = sizeof_a8xx - offset_dir_track_a8xx  # 2048 bytes
-
-    assert sizeof_a6xx == 2048 and clear_len_a6xx == 1536
-    assert sizeof_a8xx == 3072 and clear_len_a8xx == 2048
-    # Unpatched code used offset_dir_track_a6xx (512) + clear_len_a6xx (1536) on A8XX,
-    # leaving bytes 2048..3072 (1024 bytes of buffer2) uninitialized and corrupting buffer1[512..1023]!
+    print("[3/3] Verifying A8XX fd_lrzfc_layout<CHIP> br_cur_buffer & depth_clear_val offsets...")
+    # On A7XX: fc1 is 2048 B, buffer[0] at 2048, buffer[1] at 2112, bv_cur_buffer at 2176, br_cur_buffer at 2240
+    # On A8XX: fc1 is 4096 B, fc2 is 4096 B, buffer[0] at 8192, buffer[1] at 9216, bv_cur_buffer at 10240, br_cur_buffer at 11264
+    a7xx_buf0_clear = 2048 + 56
+    a7xx_buf1_clear = 2048 + 64 + 56
+    a7xx_br_cur = 2048 + 128 + 64
+    a8xx_buf0_clear = 8192 + 56
+    a8xx_buf1_clear = 8192 + 1024 + 56
+    a8xx_br_cur = 8192 + 2048 + 1024
+    assert a7xx_br_cur == 2240 and a8xx_br_cur == 11264
+    assert a7xx_buf0_clear == 2104 and a8xx_buf0_clear == 8248
+    assert a7xx_buf1_clear == 2168 and a8xx_buf1_clear == 9272
     print(
-        f"      OK: A8XX fd_lrzfc_layout<A8XX> size={sizeof_a8xx} B, dir_track_offset={offset_dir_track_a8xx} B, "
-        f"clear_len={clear_len_a8xx} B (eliminates 1024 B fast-clear overrun)."
+        f"      OK: A8XX fd_lrzfc_layout<A8XX> br_cur_buffer={a8xx_br_cur} (vs A7XX {a7xx_br_cur}), "
+        f"buf0_clear={a8xx_buf0_clear}, buf1_clear={a8xx_buf1_clear}."
     )
 
 

@@ -5,19 +5,16 @@ Idempotent 4-layer patch orchestrator for Turnip Adreno 8xx & Snapdragon 8s Gen 
 
 Applies:
   - Phase 0: Upstream MRs (!45937, !45973) and curated community patches (.patch and .py).
-  - Layer 1: Adreno 825 (0x44030000) & Adreno 8xx silicon descriptors, exact CCU cache
+  - Layer 1: Adreno 825 (0x44030000) & Adreno 8xx silicon descriptors, exact CCU/VPC cache
              sizing for 1 MB GMEM, and anti-underflow assertion in fd6_gmem_cache.h.
-  - Layer 2: A8XX LRZ fast-clear layout sizeof(fd_lrzfc_layout<CHIP>) fix in tu_lrz.cc,
-             residual <A7XX> template instantiation fixes in tu_pipeline.cc, tu_query_pool.cc,
-             and tu_cmd_buffer.cc.
-  - Layer 3: KGSL sparse VMA tu_dump_bo_init(dev, bo) fix, UBWC_5/UBWC_6 macrotile cases,
-             and VK_KHR_display tolerance for Winlator/Eden.
-  - Layer 4: IR3 coalesce_ubo_push_ranges for Adreno 825/829, and bandwidth/GMEM autotune
-             prioritization per build variant (sustained, biggmem, maxperf).
+  - Layer 2: A8XX LRZ fast-clear layout fd_lrzfc_layout<CHIP> fix in tu_lrz.cc (fixing the
+             hardcoded <A7XX> offsets 2036..2168 that read inside fc1_b instead of metadata
+             at 8192+ on A8XX), plus SP hysteresis tuning.
+  - Layer 3: KGSL sparse VMA tu_dump_bo_init(dev, bo) list initialization fix in tu_knl_kgsl.cc.
+  - Layer 4: Variant-specific autotune and GMEM/Register optimizations (sustained, biggmem, maxperf).
 """
 
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -154,37 +151,101 @@ def apply_layer1_silicon_and_gmem(mesa_dir: Path, variant: str) -> None:
     fd_dev = mesa_dir / "src/freedreno/common/freedreno_devices.py"
     if fd_dev.exists():
         content = fd_dev.read_text(encoding="utf-8")
+
+        # 1. Also add unmasked 0x44010000 KGSL chip_id for Adreno 810 if missing
+        a810_old = '       GPUId(chip_id=0xffff44010000, name="Adreno (TM) 810"),\n'
+        a810_new = (
+            '       GPUId(chip_id=0x44010000, name="Adreno (TM) 810"),\n'
+            '       GPUId(chip_id=0xffff44010000, name="Adreno (TM) 810"),\n'
+        )
+        if "0x44010000" not in content and a810_old in content:
+            content = content.replace(a810_old, a810_new, 1)
+
+        # 2. Update upstream Adreno 829 (0x44030a20 / 0x44030a00) with 1 MB GMEM safe CCU/VPC sizes
+        a829_old = (
+            'add_gpus([\n'
+            '        GPUId(chip_id=0xffff44030a20, name="Adreno (TM) 829"),\n'
+            '        GPUId(chip_id=0x44030a20, name="Adreno (TM) 829"), # KGSL\n'
+            '    ], A6xxGPUInfo(\n'
+            '        CHIP.A8XX,\n'
+            '        [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen2,\n'
+            '         GPUProps(\n'
+            '            shading_rate_matches_vk = True,  # TODO confirm this\n'
+            '            sysmem_vpc_bv_pos_buf_size = 24576,\n'
+            '         )],'
+        )
+        a829_new = (
+            'add_gpus([\n'
+            '        GPUId(chip_id=0x44030a00, name="Adreno (TM) 829"), # KGSL\n'
+            '        GPUId(chip_id=0xffff44030a00, name="Adreno (TM) 829"),\n'
+            '        GPUId(chip_id=0xffff44030a20, name="Adreno (TM) 829"),\n'
+            '        GPUId(chip_id=0x44030a20, name="Adreno (TM) 829"), # KGSL\n'
+            '    ], A6xxGPUInfo(\n'
+            '        CHIP.A8XX,\n'
+            '        [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen2,\n'
+            '         GPUProps(\n'
+            '            shading_rate_matches_vk = True,\n'
+            '            sysmem_vpc_attr_buf_size = 32768,\n'
+            '            sysmem_vpc_pos_buf_size = 16384,\n'
+            '            sysmem_vpc_bv_pos_buf_size = 16384,\n'
+            '            sysmem_ccu_color_cache_fraction = CCUColorCacheFraction.HALF.value,\n'
+            '            sysmem_per_ccu_color_cache_size = 64 * 1024,\n'
+            '            sysmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,\n'
+            '            sysmem_per_ccu_depth_cache_size = 128 * 1024,\n'
+            '            gmem_vpc_attr_buf_size = 16384,\n'
+            '            gmem_vpc_pos_buf_size = 12288,\n'
+            '            gmem_vpc_bv_pos_buf_size = 16384,\n'
+            '            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n'
+            '            gmem_per_ccu_color_cache_size = 16 * 1024,\n'
+            '            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.QUARTER.value,\n'
+            '            gmem_per_ccu_depth_cache_size = 64 * 1024,\n'
+            '            has_fs_tex_prefetch = False,\n'
+            '            supports_double_threadsize = False,\n'
+            '         )],'
+        )
+        if "0x44030a00" not in content and a829_old in content:
+            content = content.replace(a829_old, a829_new, 1)
+
+        # 3. Add Adreno 825 (Snapdragon 8s Gen 4 / SM8735, chip_id=0x44030000) with 1 MB GMEM math
         if "0x44030000" not in content:
             if variant == "biggmem":
-                a825_ccu_block = (
-                    "        sysmem_per_ccu_color_cache_size = 32 * 1024,\n"
-                    "        sysmem_per_ccu_depth_cache_size = 64 * 1024,\n"
-                    "        gmem_per_ccu_color_cache_size = 32 * 1024,\n"
-                    "        gmem_per_ccu_depth_cache_size = 32 * 1024,\n"
-                    "        gmem_ccu_color_cache_fraction = CCUColorCacheFraction.QUARTER.value,\n"
-                    "        gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,\n"
+                gmem_depth_props = (
+                    "            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
+                    "            gmem_per_ccu_color_cache_size = 8 * 1024,\n"
+                    "            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
+                    "            gmem_per_ccu_depth_cache_size = 16 * 1024,\n"
                 )
             else:
-                a825_ccu_block = (
-                    "        sysmem_per_ccu_color_cache_size = 32 * 1024,\n"
-                    "        sysmem_per_ccu_depth_cache_size = 64 * 1024,\n"
-                    "        gmem_per_ccu_color_cache_size = 32 * 1024,\n"
-                    "        gmem_per_ccu_depth_cache_size = 64 * 1024,\n"
-                    "        gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
-                    "        gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,\n"
+                gmem_depth_props = (
+                    "            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,\n"
+                    "            gmem_per_ccu_color_cache_size = 8 * 1024,\n"
+                    "            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.QUARTER.value,\n"
+                    "            gmem_per_ccu_depth_cache_size = 32 * 1024,\n"
                 )
 
-            has_early_preamble_line = (
-                "        has_early_preamble = False,\n" if variant == "maxperf" else ""
+            early_preamble_prop = (
+                "            has_early_preamble = False,\n" if variant == "maxperf" else ""
             )
 
-            a825_entry = f"""
-add_gpus([
-        GPUId(chip_id=0x44030000, name="FD825"), # Adreno 825 (Snapdragon 8s Gen 4 / SM8735)
-        GPUId(chip_id=0xffff44030000, name="FD825"),
+            a825_entry = f"""add_gpus([
+        GPUId(chip_id=0x44030000, name="Adreno (TM) 825"), # Snapdragon 8s Gen 4 (SM8735)
+        GPUId(chip_id=0xffff44030000, name="Adreno (TM) 825"),
     ], A6xxGPUInfo(
         CHIP.A8XX,
-        [a7xx_base, a7xx_gen3, a8xx_base],
+        [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen1, GPUProps(
+            sysmem_vpc_attr_buf_size = 32768,
+            sysmem_vpc_pos_buf_size = 16384,
+            sysmem_vpc_bv_pos_buf_size = 16384,
+            sysmem_ccu_color_cache_fraction = CCUColorCacheFraction.HALF.value,
+            sysmem_per_ccu_color_cache_size = 64 * 1024,
+            sysmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,
+            sysmem_per_ccu_depth_cache_size = 128 * 1024,
+            gmem_vpc_attr_buf_size = 16384,
+            gmem_vpc_pos_buf_size = 12288,
+            gmem_vpc_bv_pos_buf_size = 16384,
+{gmem_depth_props}            has_fs_tex_prefetch = False,
+            supports_double_threadsize = False,
+{early_preamble_prop}        )],
         num_ccu = 4,
         num_slices = 2,
         tile_align_w = 64,
@@ -195,60 +256,33 @@ add_gpus([
         cs_shared_mem_size = 32 * 1024,
         wave_granularity = 2,
         fibers_per_sp = 128 * 2 * 16,
-{a825_ccu_block}        a7xx_ubwc_mode = 2,
-        has_fs_tex_prefetch = False,
-        supports_double_threadsize = False,
-{has_early_preamble_line}        magic_regs = dict(),
         raw_magic_regs = a8xx_base_raw_magic_regs,
     ))
 
-add_gpus([
-        GPUId(chip_id=0x44030a00, name="FD829"), # Adreno 829 (Snapdragon 8 Gen 5)
-        GPUId(chip_id=0x44030a20, name="FD829"),
-        GPUId(chip_id=0xffff44030a00, name="FD829"),
-    ], A6xxGPUInfo(
-        CHIP.A8XX,
-        [a7xx_base, a7xx_gen3, a8xx_base],
-        num_ccu = 4,
-        num_slices = 2,
-        tile_align_w = 64,
-        tile_align_h = 32,
-        tile_max_w = 16384,
-        tile_max_h = 16384,
-        num_vsc_pipes = 32,
-        cs_shared_mem_size = 32 * 1024,
-        wave_granularity = 2,
-        fibers_per_sp = 128 * 2 * 16,
-        sysmem_per_ccu_color_cache_size = 32 * 1024,
-        sysmem_per_ccu_depth_cache_size = 64 * 1024,
-        gmem_per_ccu_color_cache_size = 32 * 1024,
-        gmem_per_ccu_depth_cache_size = 64 * 1024,
-        gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,
-        gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,
-        a7xx_ubwc_mode = 2,
-        has_fs_tex_prefetch = False,
-        supports_double_threadsize = False,
-        magic_regs = dict(),
-        raw_magic_regs = a8xx_base_raw_magic_regs,
-    ))
 """
-            anchor = "template = \"\"\"/* Copyright"
+            anchor = 'if __name__ == "__main__":'
             if anchor in content:
-                content = content.replace(anchor, a825_entry + "\n" + anchor, 1)
+                content = content.replace(anchor, a825_entry + anchor, 1)
+                compile(content, str(fd_dev), "exec")
                 fd_dev.write_text(content, encoding="utf-8", newline="\n")
-                print(f"[OK]   freedreno_devices.py: added Adreno 825 (0x44030000) and Adreno 829 descriptors (variant={variant})")
+                print(f"[OK]   freedreno_devices.py: added Adreno 825 (0x44030000) and updated Adreno 829 (variant={variant})")
             else:
-                raise RuntimeError("Could not find template anchor in freedreno_devices.py")
+                raise RuntimeError("Could not find __main__ anchor in freedreno_devices.py")
         else:
             print("[SKIP] freedreno_devices.py: Adreno 825 (0x44030000) already present")
 
     gmem_cache_h = mesa_dir / "src/freedreno/common/fd6_gmem_cache.h"
     edit_file_idempotent(
         gmem_cache_h,
-        "   return info->gmem_size_bytes - depth_cache_size - color_cache_size;",
-        "   assert(info->gmem_size_bytes > depth_cache_size + color_cache_size);\n"
-        "   return info->gmem_size_bytes - depth_cache_size - color_cache_size;",
-        "anti-underflow assertion in __calc_gmem_color_offset",
+        "   config->depth_ccu_offset = offset - (num_ccu * config->depth_cache_size);\n"
+        "   offset = config->depth_ccu_offset;\n\n"
+        "   return offset;",
+        "   assert(offset >= num_ccu * config->depth_cache_size);\n"
+        "   config->depth_ccu_offset = offset - (num_ccu * config->depth_cache_size);\n"
+        "   offset = config->depth_ccu_offset;\n\n"
+        "   return offset;",
+        "anti-underflow assertion in __calc_gmem_cache_offsets",
+        required=True,
     )
 
 
@@ -257,41 +291,61 @@ def apply_layer2_pipeline_and_lrz(mesa_dir: Path, variant: str) -> None:
     tu_lrz = mesa_dir / "src/freedreno/vulkan/tu_lrz.cc"
     edit_file_idempotent(
         tu_lrz,
-        "offsetof(fd_lrzfc_layout<A6XX>, dir_track)",
-        "offsetof(fd_lrzfc_layout<CHIP>, dir_track)",
-        "A8XX fd_lrzfc_layout<CHIP> dir_track offset fix",
-    )
-    edit_file_idempotent(
-        tu_lrz,
-        "sizeof(fd_lrzfc_layout<A6XX>) - offsetof(fd_lrzfc_layout<A6XX>, dir_track)",
-        "sizeof(fd_lrzfc_layout<CHIP>) - offsetof(fd_lrzfc_layout<CHIP>, dir_track)",
-        "A8XX fd_lrzfc_layout<CHIP> clear size fix",
-    )
-
-    tu_pipeline = mesa_dir / "src/freedreno/vulkan/tu_pipeline.cc"
-    edit_file_idempotent(
-        tu_pipeline,
-        "tu6_emit_flushes<A7XX>(",
-        "tu6_emit_flushes<CHIP>(",
-        "tu6_emit_flushes<CHIP> template dispatch in tu_pipeline.cc",
-    )
-
-    tu_query = mesa_dir / "src/freedreno/vulkan/tu_query_pool.cc"
-    edit_file_idempotent(
-        tu_query,
-        "fd_PerfCounter<A7XX>",
-        "fd_PerfCounter<CHIP>",
-        "fd_PerfCounter<CHIP> template dispatch in tu_query_pool.cc",
+        "         // FIXME hard-coding A7XX here and below is wrong!\n"
+        "         uint64_t br_cur_buffer_iova =\n"
+        "            lrz_fc_iova + offsetof(fd_lrzfc_layout<A7XX>, br_cur_buffer);\n"
+        "\n"
+        "         /* Make sure the value is written to memory. */\n"
+        "         tu_emit_event_write<CHIP>(cmd, cs, FD_CACHE_CLEAN);\n"
+        "         tu_cs_emit_wfi(cs);\n"
+        "         tu_cs_emit_pkt7(cs, CP_WAIT_FOR_ME, 0);\n"
+        "\n"
+        "         /* if (br_cur_buffer != 0) { */\n"
+        "         tu_cs_reserve(cs, 7 + if_dwords + 1 + else_dwords);\n"
+        "         tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);\n"
+        "         tu_cs_emit_qw(cs, br_cur_buffer_iova);\n"
+        "         tu_cs_emit_qw(cs, br_cur_buffer_iova);\n"
+        "         tu_cs_emit(cs, 2); /* REF */\n"
+        "         tu_cs_emit(cs, if_dwords + 1);\n"
+        "         /*    GRAS_LRZ_DEPTH_CLEAR = lrz_fc->buffer[1].depth_clear_val */\n"
+        "         cs->mem_to_reg(GRAS_LRZ_DEPTH_CLEAR(CHIP),\n"
+        "                        lrz_fc_iova + offsetof(fd_lrzfc_layout<A7XX>, buffer[1].depth_clear_val));\n"
+        "\n"
+        "         /* } else { */\n"
+        "         tu_cs_emit_pkt7(cs, CP_NOP, else_dwords);\n"
+        "         /*    GRAS_LRZ_DEPTH_CLEAR = lrz_fc->buffer[0].depth_clear_val */\n"
+        "         cs->mem_to_reg(GRAS_LRZ_DEPTH_CLEAR(CHIP),\n"
+        "                        lrz_fc_iova + offsetof(fd_lrzfc_layout<A7XX>, buffer[0].depth_clear_val));",
+        "         using lrzfc_layout = fd_lrzfc_layout<CHIP == A6XX ? A7XX : CHIP>;\n"
+        "         uint64_t br_cur_buffer_iova =\n"
+        "            lrz_fc_iova + offsetof(lrzfc_layout, br_cur_buffer);\n"
+        "\n"
+        "         /* Make sure the value is written to memory. */\n"
+        "         tu_emit_event_write<CHIP>(cmd, cs, FD_CACHE_CLEAN);\n"
+        "         tu_cs_emit_wfi(cs);\n"
+        "         tu_cs_emit_pkt7(cs, CP_WAIT_FOR_ME, 0);\n"
+        "\n"
+        "         /* if (br_cur_buffer != 0) { */\n"
+        "         tu_cs_reserve(cs, 7 + if_dwords + 1 + else_dwords);\n"
+        "         tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);\n"
+        "         tu_cs_emit_qw(cs, br_cur_buffer_iova);\n"
+        "         tu_cs_emit_qw(cs, br_cur_buffer_iova);\n"
+        "         tu_cs_emit(cs, 2); /* REF */\n"
+        "         tu_cs_emit(cs, if_dwords + 1);\n"
+        "         /*    GRAS_LRZ_DEPTH_CLEAR = lrz_fc->buffer[1].depth_clear_val */\n"
+        "         cs->mem_to_reg(GRAS_LRZ_DEPTH_CLEAR(CHIP),\n"
+        "                        lrz_fc_iova + offsetof(lrzfc_layout, buffer[1].depth_clear_val));\n"
+        "\n"
+        "         /* } else { */\n"
+        "         tu_cs_emit_pkt7(cs, CP_NOP, else_dwords);\n"
+        "         /*    GRAS_LRZ_DEPTH_CLEAR = lrz_fc->buffer[0].depth_clear_val */\n"
+        "         cs->mem_to_reg(GRAS_LRZ_DEPTH_CLEAR(CHIP),\n"
+        "                        lrz_fc_iova + offsetof(lrzfc_layout, buffer[0].depth_clear_val));",
+        "A8XX fd_lrzfc_layout<CHIP> br_cur_buffer & depth_clear_val offset fix",
+        required=True,
     )
 
     tu_cmd = mesa_dir / "src/freedreno/vulkan/tu_cmd_buffer.cc"
-    edit_file_idempotent(
-        tu_cmd,
-        "A7XX_PC_SO_STREAM_CNTL(",
-        "PC_SO_STREAM_CNTL(CHIP, ",
-        "PC_SO_STREAM_CNTL(CHIP) dispatch in tu_cmd_buffer.cc",
-    )
-
     if variant == "maxperf":
         edit_file_idempotent(
             tu_cmd,
@@ -302,41 +356,34 @@ def apply_layer2_pipeline_and_lrz(mesa_dir: Path, variant: str) -> None:
             "      tu_cs_emit_regs(cs, SP_VS_HYSTERESIS(CHIP, .dword = 0x00000800));\n"
             "      tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0x00000800));",
             "MaxPerf doubled SP hysteresis thresholds",
+            required=True,
         )
 
 
-def apply_layer3_and_4_kgsl_ir3_autotune(mesa_dir: Path, variant: str) -> None:
-    print(f"=== Layer 3 & 4: KGSL Sparse VMA, UBWC_5/6, IR3 UBO Coalescing & Autotune (variant={variant}) ===")
+def apply_layer3_and_4_kgsl_and_autotune(mesa_dir: Path, variant: str) -> None:
+    print(f"=== Layer 3 & 4: KGSL Sparse VMA Init & Variant Autotune (variant={variant}) ===")
     tu_kgsl = mesa_dir / "src/freedreno/vulkan/tu_knl_kgsl.cc"
     edit_file_idempotent(
         tu_kgsl,
-        "   vma->kgsl.fd = req.fd;\n   return VK_SUCCESS;",
-        "   vma->kgsl.fd = req.fd;\n   tu_dump_bo_init(dev, bo);\n   return VK_SUCCESS;",
+        "   out_vma->kgsl.virtual_bo = bo;\n"
+        "   *out_iova = bo->iova;\n"
+        "   return VK_SUCCESS;",
+        "   tu_dump_bo_init(dev, bo);\n"
+        "   out_vma->kgsl.virtual_bo = bo;\n"
+        "   *out_iova = bo->iova;\n"
+        "   return VK_SUCCESS;",
         "kgsl_sparse_vma_init tu_dump_bo_init(dev, bo) list initialization",
-    )
-    edit_file_idempotent(
-        tu_kgsl,
-        "   case 4:\n      info->ubwc_version = FD_UBWC_4;",
-        "   case 5:\n   case 6:\n   case 4:\n      info->ubwc_version = FD_UBWC_4;",
-        "KGSL UBWC_5 and UBWC_6 macrotile version support",
+        required=True,
     )
 
-    ir3_comp = mesa_dir / "src/freedreno/ir3/ir3_compiler.c"
-    edit_file_idempotent(
-        ir3_comp,
-        "compiler->coalesce_ubo_push_ranges = dev_info->chip == A8XX &&",
-        "compiler->coalesce_ubo_push_ranges = (info->chip_id == 0x44030000 || info->chip_id == 0x44030a20) || (dev_info->chip == A8XX &&",
-        "IR3 coalesce_ubo_push_ranges enablement for Adreno 825 and Adreno 829",
-    )
-
-    if variant in ("sustained", "biggmem"):
+    if variant == "biggmem":
         tu_autotune = mesa_dir / "src/freedreno/vulkan/tu_autotune.cc"
         edit_file_idempotent(
             tu_autotune,
-            "   if (cmd->device->physical_device->info->chip >= A8XX)",
-            "   /* Prioritize GMEM rendering on A8XX for 3200 MHz LPDDR5X bandwidth savings */\n"
-            "   if (false && cmd->device->physical_device->info->chip >= A8XX)",
-            "A8XX GMEM bandwidth prioritization in tu_autotune.cc",
+            "   DEFAULT = BANDWIDTH, /* Default algorithm, used if no other is specified. */",
+            "   DEFAULT = PREFER_GMEM, /* BigGMEM variant: prefer GMEM on Adreno 825 1 MB GMEM */",
+            "BigGMEM PREFER_GMEM default algorithm in tu_autotune.cc",
+            required=True,
         )
 
 
@@ -360,7 +407,7 @@ def main() -> int:
     apply_python_patches(mesa_dir)
     apply_layer1_silicon_and_gmem(mesa_dir, args.variant)
     apply_layer2_pipeline_and_lrz(mesa_dir, args.variant)
-    apply_layer3_and_4_kgsl_ir3_autotune(mesa_dir, args.variant)
+    apply_layer3_and_4_kgsl_and_autotune(mesa_dir, args.variant)
 
     print(f"\n[SUCCESS] All 4 layers of the Turnip A8xx ({args.variant}) patch stack applied cleanly.")
     return 0
