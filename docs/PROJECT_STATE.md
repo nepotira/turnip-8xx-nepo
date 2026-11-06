@@ -1,14 +1,13 @@
 # Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-- **Versão atual:** `v0.2.5`
+- **Versão atual:** `v0.2.6`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Implementação comprovada das correções de arquitetura do Adreno 825 e do driver Turnip (correção da invariante matemática de CCU fraction/offset no Adreno 825 eliminando corrupção de GMEM/depth e novo patch 63 expandindo framebuffer/window scissor para eliminar o corte de 65% de tela preta em 2160p/Nyushu).
-- **Ramo ativo:** `fix/09-a825-ccu-math-and-2160p-viewport`
+- **Fase atual:** Implementação da versão `v0.2.6` com desacoplamento de DT_SONAME para `vulkan.nepo.so` (eliminando colisão de biblioteca com o HWUI do Android), suporte a Depth Blit Scaling (`BLIT_DST_BIT` em formatos de profundidade `D32_SFLOAT`, `D24_UNORM_S8_UINT`, `D16_UNORM`) para escala 2160p/4K e suporte driconf universal para todos os emuladores de Switch (Nyushu, Eden Nepo, Citron, Yuzu, Sudachi, Suyu, Ryujinx, Uzuy).
+- **Ramo ativo:** `fix/10-vulkan-nepo-so-and-depth-blit`
 - **Status de verificação:**
-  - `python3 scripts/verify_patch_stack.py`: **VERIFICADO (PASS)**.
-  - Testes em árvore real Mesa 3D (`.scratch/mesa-src`): As 4 variantes (`biggmem`, `sustained`, `maxperf`, `switch2`) aplicam 100% dos patches cleanly sem conflito.
-  - Correção matemática exata de frações CCU em `scripts/apply_all_patches.py` e `scripts/verify_patch_stack.py`.
-  - Novo patch `patches/63-tu-framebuffer-attachment-extent-guard.py` implementado em `tu_device.cc` e `tu_cmd_buffer.cc`.
+  - `python3 scripts/verify_patch_stack.py`: **VERIFICADO (PASS)** (18 patches Git, 14 patches Python, u_gralloc_aimapper.c).
+  - Testes em árvore real Mesa 3D (`.scratch/mesa-src`): Novo patch `patches/64-tu-depth-blit-features.py` aplica cleanly e com idempotência.
+  - CI Workflow atualizado para empacotar `vulkan.nepo.so` com `patchelf --set-soname vulkan.nepo.so` e `minApi: 30`.
 
 - **Release publicada:** [v0.2.5](https://github.com/nepotira/turnip-8xx-nepo/releases/tag/v0.2.5) (Build CI GitHub Actions Run [42220390281](https://github.com/nepotira/turnip-8xx-nepo/actions/runs/42220390281)).
 
