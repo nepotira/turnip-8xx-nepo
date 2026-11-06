@@ -53,6 +53,8 @@ ORDERED_PY_PATCHES = [
     "55-a8xx-sp-hysteresis-gs-hs-ds.py",
     "56-a8xx-shader-perf-and-compilation.py",
     "57-a8xx-switch2-dlss-extensions.py",
+    "58-a8xx-conservative-rast.py",
+    "59-a8xx-ir3-coalesce-ubo-push-ranges.py",
     "61-a8xx-lrz-bidir-disable.py",
     "62-a8xx-lrz-color-comp-mask.py",
 ]

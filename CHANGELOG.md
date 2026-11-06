@@ -5,7 +5,10 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
-## [0.2.1] - 2026-11-06
+## [0.2.2] - 2026-11-06
+### Added
+- **Patch `58-a8xx-conservative-rast.py`:** Ativação de rasterização conservadora para binning com fragment density maps / VRS em `CHIP >= A7XX` (incluindo Adreno 8xx), reduzindo processamento de vértices em passes de sombreamento de taxa variável.
+- **Patch `59-a8xx-ir3-coalesce-ubo-push-ranges.py`:** Coalescência de intervalos de push UBO estendida no compilador IR3 para o Adreno 825 (`0x44030000` / `0xffff44030000`) e Adreno 829 (`0x44030a20`), agrupando acessos de Uniform Buffers no arquivo de constantes on-chip e mitigando diretamente o gargalo do barramento de 3200 MHz da memória LPDDR5X.
 ### Added
 - **Patch `56-a8xx-shader-perf-and-compilation.py`:** Fast-path wave sizing e otimização da alocação de scratch memory para acelerar o throughput do compilador de shaders em tempo real.
 - **Patch `57-a8xx-switch2-dlss-extensions.py`:** Exposição no Vulkan das extensões `VK_KHR_shader_integer_dot_product` (`DP4a`) e `VK_KHR_shader_float16_int8` para aceleração matricial por hardware de modelos neurais (DLSS 5 / Qualcomm SGSR 2) e emulação de Switch 2 (T239/NVN2).

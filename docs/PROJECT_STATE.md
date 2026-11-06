@@ -1,11 +1,11 @@
 # Estado do Projeto — Turnip Adreno 8xx & Snapdragon 8s Gen 4 (`Adreno 825`) Patch Stack
 
-- **Versão atual:** `v0.2.1`
+- **Versão atual:** `v0.2.2`
 - **Repositório público:** `https://github.com/nepotira/turnip-8xx-nepo`
-- **Fase atual:** Implementação dos patches 56 (Fast-Path Shaders) e 57 (Switch 2 / DLSS 5 DP4a), perfis driconf expandidos (Hogwarts Legacy e MK11 para Switch e PC), guia de transplante de 100% das otimizações do Eden e pesquisa forense de cutscenes.
+- **Fase atual:** Implementação dos patches 58 (Conservative Rast Binning para A8XX) e 59 (Coalescência de Push Ranges de UBO no IR3 para Adreno 825/829), complementando os patches 56 e 57.
 - **Ramo ativo:** `main`
 - **Status de verificação:**
-  - `python3 scripts/verify_patch_stack.py` (validação de 18 patches + 10 scripts Python + módulo aimapper + GMEM math): **VERIFICADO (PASS)**.
+  - `python3 scripts/verify_patch_stack.py` (validação de 18 patches + 12 scripts Python + módulo aimapper + GMEM math): **VERIFICADO (PASS)**.
   - Testes em hardware físico (`SM8735` / `POCO F7` com `Adreno 825`):
     - Confirmação de benchmark informada pelo usuário: **BigGMEM em 1º lugar**, **Sustained em 2º lugar**, **Performance em 3º lugar**.
     - Desempenho significativamente superior ao Turnip V38 e MrPurple v30.

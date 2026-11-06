@@ -1,5 +1,11 @@
 # Diário do Projeto (`JOURNAL.md`)
 
+## 2026-11-06 — Implementação dos Patches 58 e 59 (Conservative Rast e Coalescência UBO no IR3 para Adreno 825) (v0.2.2)
+- **Contexto:** Aplicação das soluções restantes detalhadas no Plano de Implementação e no Relatório Técnico:
+  1. Patch 58 (`58-a8xx-conservative-rast.py`): Expansão da rasterização conservadora para binning com FDM / VRS em `CHIP >= A7XX`.
+  2. Patch 59 (`59-a8xx-ir3-coalesce-ubo-push-ranges.py`): Coalescência de UBO push ranges ativada para o Adreno 825 (`0x44030000` / `0xffff44030000`) e Adreno 829 (`0x44030a20`) no compilador IR3, minimizando leituras na DRAM lenta de 3200 MHz.
+- **Evidências:** `verify_patch_stack.py` aprovou 18 patches + 12 scripts Python e todas as invariantes. Compilação no GitHub Actions executada para todas as 4 variantes.
+
 ## 2026-11-06 — Implementação dos Patches 56/57, Aceleração de Shaders, Correção de Cutscenes, Análise de Hogwarts/MK11 no Switch e Guia de Transplante do Eden (v0.2.1)
 - **Contexto:** Atendimento das novas demandas do usuário:
   1. Análise profunda e correções para Hogwarts Legacy e Mortal Kombat 11 em suas edições nativas de Nintendo Switch no emulador (Eden/Citron/Yuzu), mantendo as análises de PC intactas.
