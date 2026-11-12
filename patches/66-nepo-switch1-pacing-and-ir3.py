@@ -36,6 +36,10 @@ def mod_1_expand_pipeline_suballoc(mesa_root: pathlib.Path) -> str:
     if pat_prof.search(txt):
         txt = pat_prof.sub(r"\g<1>512 * 1024,", txt, count=1)
 
+    # Migrate legacy instance->drirc.<cat>.<opt> hunks from older .patch files to modern TU_DRIRC(device, <cat>.<opt>)
+    if "TU_DRIRC(" in txt:
+        txt = re.sub(r"(?:device->)?instance->drirc\.([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+)", r"TU_DRIRC(device, \1)", txt)
+
     p.write_text(txt, encoding="utf-8", newline="\n")
     return "OK"
 
