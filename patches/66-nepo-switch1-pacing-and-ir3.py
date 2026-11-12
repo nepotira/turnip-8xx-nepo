@@ -327,48 +327,35 @@ def mod_6_lrz_preserve_on_skipped_color_writes(mesa_root: pathlib.Path) -> str:
 
 
 def mod_7_repair_kgsl_ib_cache_hunk2(mesa_root: pathlib.Path) -> str:
-    """Ensure Hunk 2 of 08-tu-kgsl-cache-retired-a8xx-ib-storage.patch is present in kgsl_bo_init
-    even if upstream Mesa refactored the lines around IOCTL_KGSL_GPUMEM_ALLOC_ID.
+    """If Hunk 2 of patch 08 did not apply on a newer Mesa commit while Hunks 3/4 did,
+    clean up the undeclared 'cached', 'requested_flags', and 'reused' references in kgsl_bo_init.
     """
-    import re
     p = mesa_root / "src/freedreno/vulkan/tu_knl_kgsl.cc"
     if not p.exists():
-        return "ERROR: tu_knl_kgsl.cc not found"
+        return "SKIP"
     txt = p.read_text(encoding="utf-8")
 
-    # If Hunk 2 is already present, nothing to repair
+    # If Hunk 2 applied properly, 'requested_flags' is declared as const uint32_t
     if "const uint32_t requested_flags = req.flags;" in txt:
         return "ALREADY"
 
-    # Match the unpatched GPUMEM_ALLOC_ID call inside kgsl_bo_init
-    pat = re.compile(
-        r"([ \t]*int ret;\s*\n\s*ret = safe_ioctl\(([^,\n]+),\s*\n?\s*IOCTL_KGSL_GPUMEM_ALLOC_ID,\s*&req\);)"
-    )
-    m = pat.search(txt)
-    if not m:
-        return "ERROR: GPUMEM_ALLOC_ID anchor not found in tu_knl_kgsl.cc"
+    # Otherwise, Hunk 2 was rejected by patch -p1; sanitize the orphaned Hunk 3 & 4 lines:
+    changed = False
+    if ".alias_handle = cached.alias," in txt:
+        txt = txt.replace("      .alias_handle = cached.alias,\n", "")
+        txt = txt.replace("      .kgsl_alloc_flags = requested_flags,\n", "")
+        changed = True
+    if "} else if (!reused && kgsl_bo_needs_alias(dev, flags)) {" in txt:
+        txt = txt.replace(
+            "} else if (!reused && kgsl_bo_needs_alias(dev, flags)) {",
+            "} else if (kgsl_bo_needs_alias(dev, flags)) {",
+        )
+        changed = True
 
-    fd_expr = m.group(2).strip()
-    replacement = (
-        "   /* NEPO_66_KGSL_IB_CACHE_HUNK2 */\n"
-        "   const uint32_t requested_flags = req.flags;\n"
-        "   struct kgsl_ib_cache_entry cached = {};\n"
-        "   bool reused = !lazy_vma && !(flags & TU_BO_ALLOC_REPLAYABLE) &&\n"
-        "      kgsl_bo_needs_alias(dev, flags) &&\n"
-        "      kgsl_ib_cache_take(dev, size, align, req.flags, &cached);\n"
-        "   int ret = 0;\n"
-        "   if (reused) {\n"
-        "      req.id = cached.handle;\n"
-        "      req.mmapsize = cached.size;\n"
-        "      req.gpuaddr = cached.iova;\n"
-        "   } else {\n"
-        f"      ret = safe_ioctl({fd_expr},\n"
-        "                       IOCTL_KGSL_GPUMEM_ALLOC_ID, &req);\n"
-        "   }"
-    )
-    txt = txt[:m.start()] + replacement + txt[m.end():]
-    p.write_text(txt, encoding="utf-8", newline="\n")
-    return "OK"
+    if changed:
+        p.write_text(txt, encoding="utf-8", newline="\n")
+        return "OK"
+    return "ALREADY"
 
 def main() -> int:
     mesa_root = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else pathlib.Path.cwd()

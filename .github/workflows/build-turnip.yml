@@ -99,7 +99,7 @@ jobs:
 
       - name: Clone Mesa 26.2-devel (with retry)
         run: |
-          MESA_REF="${{ github.event.inputs.mesa_ref || 'main' }}"
+          MESA_REF="${{ github.event.inputs.mesa_ref || '79f24495' }}"
           for attempt in 1 2 3 4; do
             rm -rf mesa-src
             if git clone --depth=500 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src; then
