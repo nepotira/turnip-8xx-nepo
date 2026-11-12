@@ -1,5 +1,17 @@
 # Diário do Projeto (`JOURNAL.md`)
 
+## 2026-11-12 — Auditoria de 28 Pontos no Código Real e Implementação do Patch 66 para Fluidez de Switch 1 e Adreno 8xx (v0.2.8)
+- **Contexto:** Investigação em código profundo sobre as causas de quedas abruptas de FPS na compilação de shaders, quedas ao carregar UBOs/texturas (`vk_scheduler.cpp` Render Pass splitting) e instabilidade de frame pacing em emuladores de Nintendo Switch 1 nas GPUs Adreno 8xx (Snapdragon 8s Gen 4 / Adreno 825).
+- **Achados comprovados no código de `.scratch/mesa-src`:**
+  1. `pipeline_suballoc` e `kgsl_profiling_suballoc` em `tu_device.cc:3160` estavam em 128 KB, gerando excesso de syscalls `ioctl` ao KGSL durante compilação de pipelines.
+  2. `choose_instr_inc` em `ir3_sched.c:808` escolhia instruções apenas por `nearest_use` sem ponderar `live_effect()`, agravando o backtracking de registradores nos shaders traduzidos do Switch.
+  3. `emit_subpass_slice_wait` em `tu_cmd_buffer.cc:451` e o flush de `resuming` emitiam `WFI` completo em vez de `CP_WAIT_FOR_ME`, drenando as Slices da Adreno 8xx a cada divisão de Render Pass.
+  4. Render Targets de motion vectors e cópia de profundidade do Switch (`R16G16_SFLOAT`, `R16_SFLOAT`, `R32_SFLOAT`, `R8_UNORM`, `R8G8_UNORM`) com `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` caíam fora da lista Tiled+UBWC em `tu_image.cc:620`.
+  5. Draws intermediários sem escrita de cor (`TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED`) em `tu_lrz.cc` desativavam a escrita LRZ para todo o restante do Render Pass.
+- **Ações executadas:**
+  - Criação e registro de `patches/66-nepo-switch1-pacing-and-ir3.py` atuando sobre as 6 âncoras verificadas, sem alterar nenhum patch anterior (0001..65).
+  - Validação com `--strict` nas 4 variantes (`sustained`, `biggmem`, `maxperf`, `switch2`) com `FAIL=0` e `verify_patch_stack.py` com código 0.
+
 ## 2026-11-06 — Diagnóstico Forense Arquitetural Comprovado em Código Real e Atualização Constitucional
 - **Contexto:** O usuário reportou que nas 3 versões do driver (v0.2.2, v0.2.3, v0.2.4) os erros persistiram idênticos (esbranquiçado em Mario Odyssey e falha em 2160p com 65% de tela preta no Nyushu). O usuário exigiu:
   1. Análise exaustiva em código-fonte real do Mesa 3D e emuladores para determinar a causa real, sem aplicar resoluções ainda.

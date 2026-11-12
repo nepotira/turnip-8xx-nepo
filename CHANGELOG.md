@@ -5,6 +5,16 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-11-12
+### Added
+- **Patch 66 (`patches/66-nepo-switch1-pacing-and-ir3.py` — Switch 1 Frame Pacing, IR3 Register Pressure & Adreno 8xx Slice Pack):**
+  - **Expansão de Subalocadores KGSL (`tu_device.cc`):** `pipeline_suballoc` expandido de 128 KB para 1 MB (`1024 * 1024`) e `kgsl_profiling_suballoc` de 128 KB para 512 KB, reduzindo em até 8x as chamadas bloqueantes `ioctl` de alocação de BO no kernel KGSL durante rajadas de compilação de shaders nos emuladores de Nintendo Switch 1.
+  - **Heurística de Pressão de Registradores no Escalonador IR3 (`ir3_sched.c`):** Priorização de instruções com menor `live_effect()` dentro de `choose_instr_inc`, prevenindo estouro de registradores e backtracking do compilador IR3 em shaders descompilados da arquitetura Maxwell (NVN).
+  - **Relaxamento de Barreira de Slices em Sysmem (`tu_cmd_buffer.cc`):** Substituição de `tu_cs_emit_wfi` por `CP_WAIT_FOR_ME` tanto em `emit_subpass_slice_wait` (modo `SYSMEM`) quanto na retomada de passes divididos (`resuming`), evitando que as 2 Slices da Adreno 825 sejam drenadas a zero quando o `vk_scheduler.cpp` do Switch divide Render Passes para cópia de UBOs (`vkCmdCopyBuffer`).
+  - **Fast-Path para o Presenter / BlitScreen do Switch (`tu_cmd_buffer.cc`):** Passes de 1 subpass sem Depth/Stencil attachment e com até 2 draw calls ignoram o overhead de binning GMEM e entram direto em `SYSMEM`.
+  - **Cobertura Completa de Formatos Mutable UBWC para Switch 1 (`tu_image.cc`):** Adicionados `VK_FORMAT_R16G16_SFLOAT` (motion vectors TAA/FSR), `VK_FORMAT_R16_SFLOAT`, `VK_FORMAT_R32_SFLOAT` (depth-to-color copy Snowdrop/UE4), `VK_FORMAT_R8G8_UNORM` e `VK_FORMAT_R8_UNORM` ao fast-path Tiled+UBWC.
+  - **Preservação de Escrita LRZ em Draws Depth-Only Intermediários (`tu_lrz.cc`):** Evita que draws com `TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED` desativem permanentemente a escrita no buffer LRZ para o restante do Render Pass.
+
 ## [0.2.7] - 2026-11-12
 ### Added
 - **Patch 65 (Hogwarts Legacy & MK1 Color Precision + Performance Pack):** Adicionado `patches/65-nepo-hl-mk1-color-and-perf.py` com R11G11B10 FP16 blit precision, Mutable Format UBWC & BGRA8 tiled fast-path, A8xx Cat4 SFU repeat latency guard, MSAA sample shading gate, coalescência de UBO ranges vizinhos até 64B (4 vec4s) no `ir3` e preservação de cache flush em dynamic render passes suspensos/retomados da UE4.
