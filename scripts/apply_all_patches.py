@@ -66,6 +66,7 @@ ORDERED_PY_PATCHES = [
     "62-a8xx-lrz-color-comp-mask.py",
     "63-tu-framebuffer-attachment-extent-guard.py",
     "64-tu-depth-blit-features.py",
+    "65-nepo-hl-mk1-color-and-perf.py",
 ]
 
 
