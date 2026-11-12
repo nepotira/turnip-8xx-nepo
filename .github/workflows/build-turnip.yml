@@ -6,7 +6,7 @@ on:
       mesa_ref:
         description: "Mesa Git ref (branch or commit SHA)"
         required: false
-        default: "35a0fef18f79d0337c76fc42f4cbfb49e59d9f58"
+        default: "main"
       publish_release:
         description: "Create a GitHub Release with compiled AdrenoTools .zip drivers"
         type: boolean
@@ -99,10 +99,10 @@ jobs:
 
       - name: Clone Mesa 26.2-devel (with retry)
         run: |
-          MESA_REF="${{ github.event.inputs.mesa_ref || '35a0fef18f79d0337c76fc42f4cbfb49e59d9f58' }}"
+          MESA_REF="${{ github.event.inputs.mesa_ref || 'main' }}"
           for attempt in 1 2 3 4; do
             rm -rf mesa-src
-            if git clone --depth=600 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src; then
+            if git clone --depth=500 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src; then
               break
             fi
             echo "Clone attempt ${attempt} failed, retrying in 10s..."

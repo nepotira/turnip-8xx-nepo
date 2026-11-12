@@ -402,6 +402,14 @@ def apply_layer2_pipeline_and_lrz(mesa_dir: Path, variant: str) -> None:
     )
 
     tu_cmd = mesa_dir / "src/freedreno/vulkan/tu_cmd_buffer.cc"
+    if "QCTDD10497382_rt_workaround" in tu_cmd.read_text(encoding="utf-8"):
+        edit_file_idempotent(
+            tu_cmd,
+            "cmd->device->physical_device->info->props.has_rt_workaround &&\n       v->info.uses_ray_intersection",
+            "FD_QUIRK(cmd->device->physical_device->info, QCTDD10497382_rt_workaround) &&\n       v->info.uses_ray_intersection",
+            "mesh shader rt_workaround quirk migration for modern Mesa",
+            required=False,
+        )
     if variant == "maxperf":
         edit_file_idempotent(
             tu_cmd,
