@@ -32,7 +32,7 @@ python3 scripts/apply_all_patches.py --mesa-dir /caminho/para/mesa --variant sus
 
 ## Como Disparar a Compilação via GitHub CLI (`gh`)
 ```bash
-gh workflow run build-turnip.yml --ref main -f variant=all
+gh workflow run build-turnip.yml --ref main -f mesa_ref=main -f skip_patches="" -f strict=false
 ```
 
 ## Licença

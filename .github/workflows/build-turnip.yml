@@ -12,6 +12,15 @@ on:
         type: boolean
         required: false
         default: false
+      skip_patches:
+        description: "Patches a NAO aplicar (nomes exatos separados por virgula)"
+        required: false
+        default: ""
+      strict:
+        description: "Falhar o build se algum patch falhar"
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - "v*"
@@ -111,7 +120,8 @@ jobs:
           python3 patch-repo/scripts/apply_all_patches.py \
             --mesa-dir mesa-src \
             --variant "${{ matrix.variant }}" \
-            --strict
+            --skip "${{ github.event.inputs.skip_patches }}" \
+            ${{ github.event.inputs.strict == 'true' && '--strict' || '' }}
 
       - name: Apply NDK r29 compatibility fixes, generate Meson cross-file & compile Turnip
         run: |

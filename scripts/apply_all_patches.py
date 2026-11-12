@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PATCHES_DIR = REPO_ROOT / "patches"
 
 RESULTS = []  # (tipo, nome, status, detalhe)
+SKIP = set()
 
 
 def record(kind: str, name: str, status: str, detail: str = "") -> None:
@@ -103,6 +104,11 @@ def apply_git_patches(mesa_dir: Path) -> None:
         if not patch_path.exists():
             raise FileNotFoundError(f"Missing required patch file: {patch_path}")
 
+        if patch_name in SKIP:
+            print(f"[SKIP-USER] {patch_name}")
+            record("git", patch_name, "SKIPPED_BY_USER")
+            continue
+
         rev_check = subprocess.run(
             ["git", "apply", "--reverse", "--check", str(patch_path)],
             cwd=mesa_dir,
@@ -154,6 +160,11 @@ def apply_python_patches(mesa_dir: Path) -> None:
         py_path = PATCHES_DIR / py_name
         if not py_path.exists():
             raise FileNotFoundError(f"Missing required Python patch script: {py_path}")
+
+        if py_name in SKIP:
+            print(f"[SKIP-USER] {py_name}")
+            record("py", py_name, "SKIPPED_BY_USER")
+            continue
         res = subprocess.run(
             [sys.executable, str(py_path)],
             cwd=mesa_dir,
@@ -482,7 +493,14 @@ def main() -> int:
         help="Build variant to configure (sustained=-b, biggmem=-e, maxperf=-p, switch2=-s2)",
     )
     parser.add_argument("--strict", action="store_true", help="Sai com codigo 2 se qualquer patch falhar")
+    parser.add_argument("--skip", default="", help="Nomes de patches (arquivo exato) separados por virgula para NAO aplicar")
     args = parser.parse_args()
+
+    SKIP.update(n.strip() for n in args.skip.split(",") if n.strip())
+    desconhecidos = SKIP - set(ORDERED_GIT_PATCHES) - set(ORDERED_PY_PATCHES)
+    if desconhecidos:
+        print(f"ERROR: --skip com nomes desconhecidos: {sorted(desconhecidos)}", file=sys.stderr)
+        return 1
 
     mesa_dir = args.mesa_dir.resolve()
     if not (mesa_dir / "src/freedreno/vulkan").is_dir():
