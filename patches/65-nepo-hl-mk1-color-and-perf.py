@@ -48,7 +48,7 @@ def fix_2_mutable_format_ubwc_and_bgra_fastpath(mesa_root: pathlib.Path) -> str:
     if not p.exists():
         return "ERROR: tu_image.cc not found"
     txt = p.read_text(encoding="utf-8")
-    if "/* NEPO_65_MUTABLE_UBWC */" in txt:
+    if "/* NEPO_65_MUTABLE_UBWC" in txt:
         return "ALREADY"
 
     # Parte A: BGRA8 HIC Tiled fast-path (linha ~576)
@@ -119,7 +119,7 @@ def fix_4_cat4_sfu_repeat_delay(mesa_root: pathlib.Path) -> str:
     if not p.exists():
         return "ERROR: ir3_legalize.c not found"
     txt = p.read_text(encoding="utf-8")
-    if "/* NEPO_65_CAT4_SFU_RPT */" in txt:
+    if "/* NEPO_65_CAT4_SFU_RPT" in txt:
         return "ALREADY"
 
     old = "         if (instr->repeat && !(dst->flags & IR3_REG_RELATIV))\n            dst_cycle++;"
@@ -135,55 +135,24 @@ def fix_4_cat4_sfu_repeat_delay(mesa_root: pathlib.Path) -> str:
 
 
 def fix_5_ubo_push_range_coalescing_a8xx(mesa_root: pathlib.Path) -> str:
-    """Enable coalesce_ubo_push_ranges for A8XX (including A825/A829) in freedreno_devices.py or ir3_compiler.c."""
-    dev_py = mesa_root / "src/freedreno/common/freedreno_devices.py"
-    ir3_c = mesa_root / "src/freedreno/ir3/ir3_compiler.c"
+    """Enable UBO push range neighbor coalescing (up to 64B / 4 vec4 gap) in ir3_nir_analyze_ubo_ranges.c."""
+    p = mesa_root / "src/freedreno/ir3/ir3_nir_analyze_ubo_ranges.c"
+    if not p.exists():
+        return "ERROR: ir3_nir_analyze_ubo_ranges.c not found"
+    txt = p.read_text(encoding="utf-8")
+    if "/* NEPO_65_UBO_COALESCE */" in txt:
+        return "ALREADY"
 
-    # 1. Check freedreno_devices.py (where modern Mesa defines coalesce_ubo_push_ranges as a GPUProp)
-    if dev_py.exists():
-        dtxt = dev_py.read_text(encoding="utf-8")
-        if "# NEPO_65_UBO_COALESCE" in dtxt:
-            return "ALREADY"
-        if "coalesce_ubo_push_ranges" in dtxt:
-            # Enable coalesce_ubo_push_ranges = True in a8xx_base if not already there
-            anchor = "cube_coord_hang_quirk = True,"
-            if anchor in dtxt and "coalesce_ubo_push_ranges = True," not in dtxt[dtxt.find("a8xx_base"):dtxt.find("a8xx_base") + 900]:
-                dtxt = dtxt.replace(
-                    anchor,
-                    anchor + "\n        # NEPO_65_UBO_COALESCE\n        coalesce_ubo_push_ranges = True,",
-                    1,
-                )
-                dev_py.write_text(dtxt, encoding="utf-8")
-                return "OK(freedreno_devices.py)"
-
-    # 2. Also ensure ir3_compiler.c enables it for A825/A8xx if compiler->coalesce_ubo_push_ranges exists
-    if ir3_c.exists():
-        ctxt = ir3_c.read_text(encoding="utf-8")
-        if "/* NEPO_65_UBO_COALESCE */" in ctxt:
-            return "ALREADY"
-        m = re.search(r"compiler->coalesce_ubo_push_ranges\s*=\s*[^;]+;", ctxt)
-        if m:
-            rep = (
-                "/* NEPO_65_UBO_COALESCE */\n"
-                "   compiler->coalesce_ubo_push_ranges = (compiler->gen >= 8) || "
-                + m.group(0).split("=", 1)[1].strip()
-            )
-            ctxt = ctxt[:m.start()] + rep + ctxt[m.end():]
-            ir3_c.write_text(ctxt, encoding="utf-8")
-            return "OK(ir3_compiler.c)"
-        # Fallback: inject at end of ir3_compiler_create if field exists in ir3_compiler.h
-        ir3_h = mesa_root / "src/freedreno/ir3/ir3_compiler.h"
-        if ir3_h.exists() and "coalesce_ubo_push_ranges" in ir3_h.read_text(encoding="utf-8"):
-            anchor2 = "compiler->has_preamble ="
-            if anchor2 in ctxt:
-                ctxt = ctxt.replace(
-                    anchor2,
-                    "/* NEPO_65_UBO_COALESCE */ compiler->coalesce_ubo_push_ranges = (compiler->gen >= 8);\n   " + anchor2,
-                    1,
-                )
-                ir3_c.write_text(ctxt, encoding="utf-8")
-                return "OK(ir3_compiler.c injected)"
-    return "SKIP"
+    old = "      if (a->start > b->end || a->end < b->start)\n         continue;"
+    new = (
+        "      /* NEPO_65_UBO_COALESCE: Coalesce neighboring UBO ranges within 64B (4 vec4s) to reduce ldc.k count */\n"
+        "      if (a->start > b->end + 64 || a->end + 64 < b->start)\n"
+        "         continue;"
+    )
+    if old in txt:
+        p.write_text(txt.replace(old, new, 1), encoding="utf-8")
+        return "OK"
+    return "ERROR: anchor not found in ir3_nir_analyze_ubo_ranges.c"
 
 
 def fix_6_split_renderpass_flush(mesa_root: pathlib.Path) -> str:
@@ -191,7 +160,7 @@ def fix_6_split_renderpass_flush(mesa_root: pathlib.Path) -> str:
     if not p.exists():
         return "ERROR: tu_cmd_buffer.cc not found"
     txt = p.read_text(encoding="utf-8")
-    if "/* NEPO_65_RESUMING_FLUSH */" in txt:
+    if "/* NEPO_65_RESUMING_FLUSH" in txt:
         return "ALREADY"
 
     old = (
@@ -227,7 +196,7 @@ def main() -> int:
     if any(r.startswith("ERROR") for r in results):
         print(f"{NAME}: ERROR ({summary})", file=sys.stderr)
         return 1
-    if all(r == "ALREADY" for r in results):
+    if all(r in ("ALREADY", "SKIP") for r in results) and any(r == "ALREADY" for r in results):
         print(f"{NAME}: already applied ({summary})")
         return 0
     print(f"{NAME}: applied ({summary})")

@@ -16,7 +16,7 @@ Run from Mesa source root. Idempotent and safe to run multiple times.
 import sys
 
 NAME = "54-a8xx-sp-hysteresis.py"
-MARKER = "SP_PS_HYSTERESIS(CHIP, .dword = 0x00000c00)"
+MARKER = "SP_VS_HYSTERESIS(CHIP,"
 TARGET = "src/freedreno/vulkan/tu_cmd_buffer.cc"
 
 OLD_CHUNK = (
