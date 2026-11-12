@@ -82,13 +82,13 @@ Lista dos patches que deram FAIL em cada variante:
 35a0fef1
 
 4. Lista de arquivos alterados (git diff --stat main..HEAD):
- .github/workflows/build-turnip.yml |  7 ++++---
- CHANGELOG.md                       |  7 +++++++
- README.md                          | 15 +++++++++++----
- docs/AUDITORIA_MESA_REAL.md        | 78 ++++++++++++++++++++++++++++++++++++++
- docs/JOURNAL.md                    |  7 +++++++
- scripts/apply_all_patches.py       | 35 +++++++++++++++++++++++++++++++++++
- scripts/verify_patch_stack.py      | 31 +++++++++++++++++++++++++++++++
- 7 files changed, 173 insertions(+), 7 deletions(-)
+ .github/workflows/build-turnip.yml |  7 +--
+ CHANGELOG.md                       |  7 +++
+ README.md                          | 15 ++++--
+ docs/AUDITORIA_MESA_REAL.md        | 94 ++++++++++++++++++++++++++++++++++++++
+ docs/JOURNAL.md                    |  7 +++
+ scripts/apply_all_patches.py       | 35 ++++++++++++++
+ scripts/verify_patch_stack.py      | 31 +++++++++++++
+ 7 files changed, 189 insertions(+), 7 deletions(-)
 
 5. CONFIRMO: nenhum arquivo em patches/ foi alterado
