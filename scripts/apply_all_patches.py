@@ -147,7 +147,11 @@ def apply_git_patches(mesa_dir: Path) -> None:
                 record("git", patch_name, "OK")
             else:
                 err_detail = fwd_check.stderr.strip().splitlines()[0] if fwd_check.stderr.strip() else ""
-                record("git", patch_name, "FAIL", err_detail)
+                if patch_name == "kgsl-syncobj-merge-ts-fd.patch" and "convert aggregate `ret` to FD" in (mesa_dir / "src/freedreno/vulkan/tu_knl_kgsl.cc").read_text(encoding="utf-8"):
+                    print(f"  -> [SKIP] {patch_name} already merged upstream.")
+                    record("git", patch_name, "SKIP_ALREADY", "merged upstream")
+                else:
+                    record("git", patch_name, "FAIL", err_detail)
                 print(
                     f"[WARN] {patch_name}: skipped (likely absorbed upstream): "
                     f"{fwd_check.stderr.strip().splitlines()[:1]}",
@@ -178,7 +182,9 @@ def apply_python_patches(mesa_dir: Path) -> None:
             print(res.stderr.strip(), file=sys.stderr)
 
         texto = (res.stdout or "") + (res.stderr or "")
-        if res.returncode != 0 or "WARNING" in texto or "ERROR" in texto:
+        if res.returncode == 0 and "skipped" in texto and py_name == "59-a8xx-ir3-coalesce-ubo-push-ranges.py":
+            record("py", py_name, "SKIP_ALREADY", "superseded by 65 on modern Mesa")
+        elif res.returncode != 0 or "WARNING" in texto or "ERROR" in texto:
             record("py", py_name, "FAIL", texto.strip().splitlines()[0] if texto.strip() else "sem saida")
         elif "already applied" in texto:
             record("py", py_name, "SKIP_ALREADY")
