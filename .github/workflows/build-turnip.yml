@@ -110,7 +110,8 @@ jobs:
         run: |
           python3 patch-repo/scripts/apply_all_patches.py \
             --mesa-dir mesa-src \
-            --variant "${{ matrix.variant }}"
+            --variant "${{ matrix.variant }}" \
+            --strict
 
       - name: Apply NDK r29 compatibility fixes, generate Meson cross-file & compile Turnip
         run: |
