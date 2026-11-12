@@ -16,6 +16,14 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 import apply_all_patches  # noqa: E402
 
+KNOWN_UPSTREAM_OPTIONS = {
+    "tu_independent_icache_miss",
+    "tu_allow_oob_indirect_ubo_loads",
+    "tu_enable_ssbo_emulation",
+    "tu_enable_fast_border_color_for_undefined_formats",
+    "tu_emulate_alpha_to_coverage",
+}
+
 
 def calc_a8xx_cache_offsets(
     gmem_bytes: int,
@@ -169,10 +177,34 @@ def verify_lrzfc_layout_invariant() -> None:
     )
 
 
+def verify_repo_consistency() -> None:
+    print("[4/4] Verificando consistencia repo: patches listados, variantes, driconf...")
+    listados = set(apply_all_patches.ORDERED_GIT_PATCHES) | set(apply_all_patches.ORDERED_PY_PATCHES)
+    # 58 e um guard no-op, propositalmente fora da lista do orquestrador
+    ignorar = {"aimapper", "eden-optimizations-unified.patch", "58-a8xx-conservative-rast.py", "__pycache__"}
+    no_disco = {p.name for p in PATCHES_DIR.iterdir()} - ignorar
+    assert no_disco == listados, f"patches fora de sincronia: so_no_disco={no_disco - listados} so_na_lista={listados - no_disco}"
+
+    workflow = (REPO_ROOT / ".github/workflows/build-turnip.yml").read_text(encoding="utf-8")
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    for v in ("Sustained", "BigGMEM", "MaxPerf", "Switch2"):
+        assert f"Turnip-A8xx-8sGen4-{v}" in workflow, f"variante {v} ausente do workflow"
+        assert f"Turnip-A8xx-8sGen4-{v}" in readme, f"variante {v} ausente do README"
+
+    script = (SCRIPTS_DIR / "apply_all_patches.py").read_text(encoding="utf-8")
+    patches_txt = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in PATCHES_DIR.glob("*") if p.is_file())
+    import re
+    opcoes = set(re.findall(r'<option name="(tu_[a-z0-9_]+)"', script))
+    sem_origem = sorted(o for o in opcoes if o not in patches_txt and o not in KNOWN_UPSTREAM_OPTIONS)
+    assert not sem_origem, f"opcoes de driconf sem origem conhecida: {sem_origem}"
+    print("      OK")
+
+
 def main() -> int:
     verify_files_and_syntax()
     verify_gmem_mathematics()
     verify_lrzfc_layout_invariant()
+    verify_repo_consistency()
     print("\n[VERIFIED] All static, syntactic, and mathematical invariants passed.")
     return 0
 

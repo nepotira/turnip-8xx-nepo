@@ -6,13 +6,20 @@ Repositório de engenharia reversa, auditoria forense e compilação automatizad
 - **[RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md](RELATORIO_TECNICO_DRIVERS_ADRENO_8XX.md):** Radiografia completa da arquitetura fatiada (*Sliced Architecture*) do Adreno 8xx, gargalos do Snapdragon 8s Gen 4 e auditoria de código de mais de 25 forks comunitários de Turnip.
 - **[PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md](PLANO_IMPLEMENTACAO_CORRECAO_ADRENO_8XX.md):** Matriz de triagem (Adotar / Adaptar / Rejeitar) e especificação das 4 Camadas de patches sobre o `mesa/main >= d520ae90`.
 
-## As 3 Variantes Compiladas Automaticamente (`.zip` AdrenoTools)
+## As 4 Variantes Compiladas Automaticamente (`.zip` AdrenoTools)
 1. **`Turnip-A8xx-8sGen4-Sustained` (`-b` Balanced / Padrão Recomendada):**
-   - `1.056 KB` (`66 blocos`) de GMEM útil para tiles no Adreno 825, `tile_align_w = 64`, `tile_max_w = 16384`, autotuner em `"bandwidth"` (GMEM-First) e governador DCVS livre para evitar *thermal throttling* sem cooler externo.
+   - `total_reserved = 496 KB`, `usable_gmem = 528 KB` no Adreno 825, `tile_align_w = 64`, `tile_max_w = 16384`, autotuner em `"bandwidth"`.
+   - `gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_color_cache_size = 16 * 1024`, `gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.QUARTER.value`, `gmem_per_ccu_depth_cache_size = 64 * 1024`.
 2. **`Turnip-A8xx-8sGen4-BigGMEM` (`-e` Eco-CCU / Max Tile):**
-   - Reduz sincronizadamente o Depth CCU em modo GMEM para `QUARTER` ($256\text{ KB}$) em GPUs de $2\text{ MB}$ (`Adreno 825/829`), liberando **`1.312 KB` (`82 blocos` — 64% da SRAM física)** exclusivamente para tiles em jogos DirectX 12 / Unreal Engine 5 pesados.
+   - `total_reserved = 368 KB`, `usable_gmem = 656 KB` no Adreno 825.
+   - `gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_color_cache_size = 16 * 1024`, `gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_depth_cache_size = 32 * 1024`.
 3. **`Turnip-A8xx-8sGen4-MaxPerf` (`-p` Performance `PWR_MAX`):**
-   - Mantém `KGSL_CONSTRAINT_PWR_MAX` ativo com refresh de $40\text{ ms}$ para desempenho máximo em aparelhos com cooler Peltier externo ou ventoinha integrada.
+   - `total_reserved = 496 KB`, `usable_gmem = 528 KB` no Adreno 825, mantendo `KGSL_CONSTRAINT_PWR_MAX` ativo com refresh de 40 ms para desempenho máximo em aparelhos com cooler Peltier externo ou ventoinha integrada.
+   - `gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_color_cache_size = 16 * 1024`, `gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.QUARTER.value`, `gmem_per_ccu_depth_cache_size = 64 * 1024`.
+4. **`Turnip-A8xx-8sGen4-Switch2` (`-s2` Switch 2 / DLSS-like):**
+   - Specialized for Nintendo Switch 2 (T239/NVN2), DLSS 5 / Cooperative Matrix, Mesh Shaders & Zero-Stutter Shader Delivery.
+   - `total_reserved = 368 KB`, `usable_gmem = 656 KB` no Adreno 825.
+   - `gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_color_cache_size = 16 * 1024`, `gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.EIGHTH.value`, `gmem_per_ccu_depth_cache_size = 32 * 1024`.
 
 ## Como Aplicar os Patches e Verificar Localmente
 ```bash
@@ -25,7 +32,7 @@ python3 scripts/apply_all_patches.py --mesa-dir /caminho/para/mesa --variant sus
 
 ## Como Disparar a Compilação via GitHub CLI (`gh`)
 ```bash
-gh workflow run build-turnip.yml --ref main -f variant=all
+gh workflow run build-turnip.yml --ref main -f mesa_ref=main -f skip_patches="" -f strict=false
 ```
 
 ## Licença

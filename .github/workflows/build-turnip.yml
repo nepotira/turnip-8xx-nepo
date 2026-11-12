@@ -12,6 +12,15 @@ on:
         type: boolean
         required: false
         default: false
+      skip_patches:
+        description: "Patches a NAO aplicar (nomes exatos separados por virgula)"
+        required: false
+        default: ""
+      strict:
+        description: "Falhar o build se algum patch falhar"
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - "v*"
@@ -42,11 +51,11 @@ jobs:
           - variant: sustained
             suffix: "-b"
             package_name: "Turnip-A8xx-8sGen4-Sustained"
-            description: "Balanced & Sustained for Snapdragon 8s Gen 4 (Adreno 825) & Adreno 8xx (688 KB GMEM, UBWC, SP Hysteresis)"
+            description: "Balanced & Sustained for Snapdragon 8s Gen 4 (Adreno 825) & Adreno 8xx (528 KB GMEM, UBWC, SP Hysteresis)"
           - variant: biggmem
             suffix: "-e"
             package_name: "Turnip-A8xx-8sGen4-BigGMEM"
-            description: "Extended 752 KB GMEM for Switch Emulation (Eden/Citron/Sudachi) on Adreno 825 & Adreno 8xx"
+            description: "Extended 656 KB GMEM for Switch Emulation (Eden/Citron/Sudachi) on Adreno 825 & Adreno 8xx"
           - variant: maxperf
             suffix: "-p"
             package_name: "Turnip-A8xx-8sGen4-MaxPerf"
@@ -110,7 +119,9 @@ jobs:
         run: |
           python3 patch-repo/scripts/apply_all_patches.py \
             --mesa-dir mesa-src \
-            --variant "${{ matrix.variant }}"
+            --variant "${{ matrix.variant }}" \
+            --skip "${{ github.event.inputs.skip_patches }}" \
+            ${{ github.event.inputs.strict == 'true' && '--strict' || '' }}
 
       - name: Apply NDK r29 compatibility fixes, generate Meson cross-file & compile Turnip
         run: |

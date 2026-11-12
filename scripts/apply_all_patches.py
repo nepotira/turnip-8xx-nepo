@@ -23,6 +23,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PATCHES_DIR = REPO_ROOT / "patches"
 
+RESULTS = []  # (tipo, nome, status, detalhe)
+SKIP = set()
+
+
+def record(kind: str, name: str, status: str, detail: str = "") -> None:
+    RESULTS.append((kind, name, status, detail))
+
 ORDERED_GIT_PATCHES = [
     "mr45937-tu-a8xx-wfi-before-reading-registers.patch",
     "mr45973-tu-a8xx-a2b10g10r10-alpha-precision.patch",
@@ -59,6 +66,7 @@ ORDERED_PY_PATCHES = [
     "62-a8xx-lrz-color-comp-mask.py",
     "63-tu-framebuffer-attachment-extent-guard.py",
     "64-tu-depth-blit-features.py",
+    "65-nepo-hl-mk1-color-and-perf.py",
 ]
 
 
@@ -66,6 +74,7 @@ def edit_file_idempotent(path: Path, old: str, new: str, label: str, required: b
     if not path.exists():
         msg = f"[WARN] {path} not found while applying '{label}'"
         print(msg, file=sys.stderr)
+        record("layer", label, "FAIL", "arquivo nao encontrado")
         if required:
             raise RuntimeError(msg)
         return False
@@ -73,16 +82,19 @@ def edit_file_idempotent(path: Path, old: str, new: str, label: str, required: b
     content = path.read_text(encoding="utf-8")
     if new in content:
         print(f"[SKIP] {path.name}: '{label}' already applied")
+        record("layer", label, "SKIP_ALREADY")
         return True
     if old not in content:
         msg = f"[WARN] {path.name}: anchor not found for '{label}'"
         print(msg, file=sys.stderr)
+        record("layer", label, "FAIL", "ancora nao encontrada")
         if required:
             raise RuntimeError(msg)
         return False
 
     path.write_text(content.replace(old, new, 1), encoding="utf-8", newline="\n")
     print(f"[OK]   {path.name}: applied '{label}'")
+    record("layer", label, "OK")
     return True
 
 
@@ -93,6 +105,11 @@ def apply_git_patches(mesa_dir: Path) -> None:
         if not patch_path.exists():
             raise FileNotFoundError(f"Missing required patch file: {patch_path}")
 
+        if patch_name in SKIP:
+            print(f"[SKIP-USER] {patch_name}")
+            record("git", patch_name, "SKIPPED_BY_USER")
+            continue
+
         rev_check = subprocess.run(
             ["git", "apply", "--reverse", "--check", str(patch_path)],
             cwd=mesa_dir,
@@ -101,6 +118,7 @@ def apply_git_patches(mesa_dir: Path) -> None:
         )
         if rev_check.returncode == 0:
             print(f"[SKIP] {patch_name}: already applied in tree")
+            record("git", patch_name, "SKIP_ALREADY")
             continue
 
         fwd_check = subprocess.run(
@@ -116,6 +134,7 @@ def apply_git_patches(mesa_dir: Path) -> None:
                 check=True,
             )
             print(f"[OK]   {patch_name}: applied cleanly via git apply --3way")
+            record("git", patch_name, "OK")
         else:
             patch_cmd = subprocess.run(
                 ["patch", "-p1", "--forward", "--batch", "-i", str(patch_path)],
@@ -125,7 +144,14 @@ def apply_git_patches(mesa_dir: Path) -> None:
             )
             if patch_cmd.returncode == 0:
                 print(f"[OK]   {patch_name}: applied via patch -p1")
+                record("git", patch_name, "OK")
             else:
+                err_detail = fwd_check.stderr.strip().splitlines()[0] if fwd_check.stderr.strip() else ""
+                if patch_name == "kgsl-syncobj-merge-ts-fd.patch" and "convert aggregate `ret` to FD" in (mesa_dir / "src/freedreno/vulkan/tu_knl_kgsl.cc").read_text(encoding="utf-8"):
+                    print(f"  -> [SKIP] {patch_name} already merged upstream.")
+                    record("git", patch_name, "SKIP_ALREADY", "merged upstream")
+                else:
+                    record("git", patch_name, "FAIL", err_detail)
                 print(
                     f"[WARN] {patch_name}: skipped (likely absorbed upstream): "
                     f"{fwd_check.stderr.strip().splitlines()[:1]}",
@@ -139,6 +165,11 @@ def apply_python_patches(mesa_dir: Path) -> None:
         py_path = PATCHES_DIR / py_name
         if not py_path.exists():
             raise FileNotFoundError(f"Missing required Python patch script: {py_path}")
+
+        if py_name in SKIP:
+            print(f"[SKIP-USER] {py_name}")
+            record("py", py_name, "SKIPPED_BY_USER")
+            continue
         res = subprocess.run(
             [sys.executable, str(py_path)],
             cwd=mesa_dir,
@@ -149,6 +180,17 @@ def apply_python_patches(mesa_dir: Path) -> None:
             print(res.stdout.strip())
         if res.stderr.strip():
             print(res.stderr.strip(), file=sys.stderr)
+
+        texto = (res.stdout or "") + (res.stderr or "")
+        if res.returncode == 0 and "skipped" in texto and py_name == "59-a8xx-ir3-coalesce-ubo-push-ranges.py":
+            record("py", py_name, "SKIP_ALREADY", "superseded by 65 on modern Mesa")
+        elif res.returncode != 0 or "WARNING" in texto or "ERROR" in texto:
+            record("py", py_name, "FAIL", texto.strip().splitlines()[0] if texto.strip() else "sem saida")
+        elif "already applied" in texto:
+            record("py", py_name, "SKIP_ALREADY")
+        else:
+            record("py", py_name, "OK")
+
         if res.returncode != 0:
             raise RuntimeError(f"Python patch script {py_name} failed with exit code {res.returncode}")
 
@@ -457,7 +499,15 @@ def main() -> int:
         default="sustained",
         help="Build variant to configure (sustained=-b, biggmem=-e, maxperf=-p, switch2=-s2)",
     )
+    parser.add_argument("--strict", action="store_true", help="Sai com codigo 2 se qualquer patch falhar")
+    parser.add_argument("--skip", default="", help="Nomes de patches (arquivo exato) separados por virgula para NAO aplicar")
     args = parser.parse_args()
+
+    SKIP.update(n.strip() for n in args.skip.split(",") if n.strip())
+    desconhecidos = SKIP - set(ORDERED_GIT_PATCHES) - set(ORDERED_PY_PATCHES)
+    if desconhecidos:
+        print(f"ERROR: --skip com nomes desconhecidos: {sorted(desconhecidos)}", file=sys.stderr)
+        return 1
 
     mesa_dir = args.mesa_dir.resolve()
     if not (mesa_dir / "src/freedreno/vulkan").is_dir():
@@ -469,6 +519,16 @@ def main() -> int:
     apply_layer1_silicon_and_gmem(mesa_dir, args.variant)
     apply_layer2_pipeline_and_lrz(mesa_dir, args.variant)
     apply_layer3_and_4_kgsl_and_autotune(mesa_dir, args.variant)
+
+    print("\n=== RESUMO DOS PATCHES ===")
+    for kind, name, status, detail in RESULTS:
+        print(f"{status:13} {kind:5} {name}  {detail}")
+    falhas = [r for r in RESULTS if r[2] == "FAIL"]
+    print(f"TOTAL={len(RESULTS)} OK={sum(1 for r in RESULTS if r[2]=='OK')} "
+          f"SKIP_ALREADY={sum(1 for r in RESULTS if r[2]=='SKIP_ALREADY')} FAIL={len(falhas)}")
+    if args.strict and falhas:
+        print("[STRICT] ha falhas; saindo com codigo 2", file=sys.stderr)
+        return 2
 
     print(f"\n[SUCCESS] All 4 layers of the Turnip A8xx ({args.variant}) patch stack applied cleanly.")
     return 0
