@@ -42,11 +42,11 @@ jobs:
           - variant: sustained
             suffix: "-b"
             package_name: "Turnip-A8xx-8sGen4-Sustained"
-            description: "Balanced & Sustained for Snapdragon 8s Gen 4 (Adreno 825) & Adreno 8xx (688 KB GMEM, UBWC, SP Hysteresis)"
+            description: "Balanced & Sustained for Snapdragon 8s Gen 4 (Adreno 825) & Adreno 8xx (528 KB GMEM, UBWC, SP Hysteresis)"
           - variant: biggmem
             suffix: "-e"
             package_name: "Turnip-A8xx-8sGen4-BigGMEM"
-            description: "Extended 752 KB GMEM for Switch Emulation (Eden/Citron/Sudachi) on Adreno 825 & Adreno 8xx"
+            description: "Extended 656 KB GMEM for Switch Emulation (Eden/Citron/Sudachi) on Adreno 825 & Adreno 8xx"
           - variant: maxperf
             suffix: "-p"
             package_name: "Turnip-A8xx-8sGen4-MaxPerf"
