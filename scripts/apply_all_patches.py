@@ -67,6 +67,7 @@ ORDERED_PY_PATCHES = [
     "63-tu-framebuffer-attachment-extent-guard.py",
     "64-tu-depth-blit-features.py",
     "65-nepo-hl-mk1-color-and-perf.py",
+    "66-nepo-switch1-pacing-and-ir3.py",
 ]
 
 
