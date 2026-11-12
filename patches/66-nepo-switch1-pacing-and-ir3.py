@@ -311,6 +311,37 @@ def mod_5_ensure_patch65_ubo_idempotency_marker(mesa_root: pathlib.Path) -> str:
     return "SKIP"
 
 
+def mod_6_lrz_preserve_on_skipped_color_writes(mesa_root: pathlib.Path) -> str:
+    """Prevent depth-only draws mid-renderpass from permanently disabling LRZ writes for the rest of the RP."""
+    p = mesa_root / "src/freedreno/vulkan/tu_lrz.cc"
+    if not p.exists():
+        return "ERROR: tu_lrz.cc not found"
+    txt = p.read_text(encoding="utf-8")
+    if "/* NEPO_66_LRZ_KEEP_DEPTH_ONLY */" in txt:
+        return "ALREADY"
+
+    old = (
+        "   if (blend_status == TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED &&\n"
+        "       z_write_enable && !TU_DRIRC(cmd->device, misc.disable_conservative_lrz)) {\n"
+        "      if (cmd->state.lrz.color_written_with_z_test) {\n"
+        '         tu_lrz_disable_write_for_rp(cmd, "Depth write + no color writes");\n'
+        "      }\n"
+        "      cmd->state.lrz.has_lrz_write_with_skipped_color_writes = true;\n"
+        "   }"
+    )
+    new = (
+        "   /* NEPO_66_LRZ_KEEP_DEPTH_ONLY: Keep LRZ write alive across Switch mid-RP depth-only draws */\n"
+        "   if (blend_status == TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED &&\n"
+        "       z_write_enable && !TU_DRIRC(cmd->device, misc.disable_conservative_lrz)) {\n"
+        "      cmd->state.lrz.has_lrz_write_with_skipped_color_writes = true;\n"
+        "   }"
+    )
+    if old not in txt:
+        return "ERROR: TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED anchor not found in tu_lrz.cc"
+    p.write_text(txt.replace(old, new, 1), encoding="utf-8", newline="\n")
+    return "OK"
+
+
 def main() -> int:
     mesa_root = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else pathlib.Path.cwd()
     r1 = mod_1_expand_pipeline_suballoc(mesa_root)
@@ -318,9 +349,10 @@ def main() -> int:
     r3 = mod_3_sysmem_wfi_relax_and_presenter_fastpath(mesa_root)
     r4 = mod_4_switch_mutable_ubwc_formats(mesa_root)
     r5 = mod_5_ensure_patch65_ubo_idempotency_marker(mesa_root)
+    r6 = mod_6_lrz_preserve_on_skipped_color_writes(mesa_root)
 
-    results = (r1, r2, r3, r4)
-    summary = f"suballoc_1mb={r1} ir3_lower_live={r2} sysmem_wfi_and_presenter={r3} switch_ubwc={r4} ubo_marker={r5}"
+    results = (r1, r2, r3, r4, r6)
+    summary = f"suballoc_1mb={r1} ir3_lower_live={r2} sysmem_wfi_and_presenter={r3} switch_ubwc={r4} ubo_marker={r5} lrz_keep={r6}"
     if any(r.startswith("ERROR") for r in results):
         print(f"{NAME}: ERROR ({summary})", file=sys.stderr)
         return 1
