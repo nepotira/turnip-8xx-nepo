@@ -180,7 +180,8 @@ def verify_lrzfc_layout_invariant() -> None:
 def verify_repo_consistency() -> None:
     print("[4/4] Verificando consistencia repo: patches listados, variantes, driconf...")
     listados = set(apply_all_patches.ORDERED_GIT_PATCHES) | set(apply_all_patches.ORDERED_PY_PATCHES)
-    ignorar = {"aimapper", "eden-optimizations-unified.patch"}
+    # 58 e um guard no-op, propositalmente fora da lista do orquestrador
+    ignorar = {"aimapper", "eden-optimizations-unified.patch", "58-a8xx-conservative-rast.py", "__pycache__"}
     no_disco = {p.name for p in PATCHES_DIR.iterdir()} - ignorar
     assert no_disco == listados, f"patches fora de sincronia: so_no_disco={no_disco - listados} so_na_lista={listados - no_disco}"
 
