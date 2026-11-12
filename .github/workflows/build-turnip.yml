@@ -6,7 +6,7 @@ on:
       mesa_ref:
         description: "Mesa Git ref (branch or commit SHA)"
         required: false
-        default: "main"
+        default: "35a0fef18f79d0337c76fc42f4cbfb49e59d9f58"
       publish_release:
         description: "Create a GitHub Release with compiled AdrenoTools .zip drivers"
         type: boolean
@@ -99,20 +99,17 @@ jobs:
 
       - name: Clone Mesa 26.2-devel (with retry)
         run: |
-          MESA_REF="${{ github.event.inputs.mesa_ref || 'main' }}"
+          MESA_REF="${{ github.event.inputs.mesa_ref || '35a0fef18f79d0337c76fc42f4cbfb49e59d9f58' }}"
           for attempt in 1 2 3 4; do
             rm -rf mesa-src
-            if git clone --depth=500 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src; then
+            if git clone --depth=600 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src; then
               break
             fi
             echo "Clone attempt ${attempt} failed, retrying in 10s..."
             sleep 10
           done
           cd mesa-src
-          if [ "$MESA_REF" != "main" ]; then
-            git fetch --depth=500 origin "$MESA_REF"
-            git checkout "$MESA_REF"
-          fi
+          git checkout "$MESA_REF"
           echo "MESA_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Apply 4-Layer Turnip A8xx Patch Stack (${{ matrix.variant }})
