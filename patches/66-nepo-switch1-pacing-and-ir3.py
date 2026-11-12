@@ -18,6 +18,7 @@ NAME = "66-nepo-switch1-pacing-and-ir3"
 
 
 def mod_1_expand_pipeline_suballoc(mesa_root: pathlib.Path) -> str:
+    import re
     p = mesa_root / "src/freedreno/vulkan/tu_device.cc"
     if not p.exists():
         return "ERROR: tu_device.cc not found"
@@ -25,40 +26,18 @@ def mod_1_expand_pipeline_suballoc(mesa_root: pathlib.Path) -> str:
     if "/* NEPO_66_SUBALLOC_1MB */" in txt:
         return "ALREADY"
 
-    old = (
-        "   tu_bo_suballocator_init(\n"
-        "      &device->pipeline_suballoc, device, 128 * 1024,\n"
-        "      static_cast<enum tu_bo_alloc_flags>(TU_BO_ALLOC_GPU_READ_ONLY |\n"
-        "                                          TU_BO_ALLOC_ALLOW_DUMP |\n"
-        "                                          TU_BO_ALLOC_INTERNAL_RESOURCE |\n"
-        "                                          tu_bo_ib_flags(device)),\n"
-        '      "pipeline_suballoc");\n'
-        "   if (is_kgsl(physical_device->instance)) {\n"
-        "      tu_bo_suballocator_init(&device->kgsl_profiling_suballoc, device,\n"
-        "                              128 * 1024, TU_BO_ALLOC_INTERNAL_RESOURCE,\n"
-        '                              "kgsl_profiling_suballoc");\n'
-        "   }"
-    )
-    new = (
-        "   /* NEPO_66_SUBALLOC_1MB */\n"
-        "   tu_bo_suballocator_init(\n"
-        "      &device->pipeline_suballoc, device, 1024 * 1024,\n"
-        "      static_cast<enum tu_bo_alloc_flags>(TU_BO_ALLOC_GPU_READ_ONLY |\n"
-        "                                          TU_BO_ALLOC_ALLOW_DUMP |\n"
-        "                                          TU_BO_ALLOC_INTERNAL_RESOURCE |\n"
-        "                                          tu_bo_ib_flags(device)),\n"
-        '      "pipeline_suballoc");\n'
-        "   if (is_kgsl(physical_device->instance)) {\n"
-        "      tu_bo_suballocator_init(&device->kgsl_profiling_suballoc, device,\n"
-        "                              512 * 1024, TU_BO_ALLOC_INTERNAL_RESOURCE,\n"
-        '                              "kgsl_profiling_suballoc");\n'
-        "   }"
-    )
-    if old not in txt:
-        return "ERROR: anchor not found in tu_device.cc"
-    p.write_text(txt.replace(old, new, 1), encoding="utf-8", newline="\n")
-    return "OK"
+    pat_pipe = re.compile(r"(&device->pipeline_suballoc,\s*device,\s*)128\s*\*\s*1024,")
+    if not pat_pipe.search(txt):
+        return "ERROR: pipeline_suballoc 128*1024 anchor not found in tu_device.cc"
 
+    txt = pat_pipe.sub(r"/* NEPO_66_SUBALLOC_1MB */ \g<1>1024 * 1024,", txt, count=1)
+
+    pat_prof = re.compile(r"(&device->kgsl_profiling_suballoc,\s*device,\s*)128\s*\*\s*1024,")
+    if pat_prof.search(txt):
+        txt = pat_prof.sub(r"\g<1>512 * 1024,", txt, count=1)
+
+    p.write_text(txt, encoding="utf-8", newline="\n")
+    return "OK"
 
 def mod_2_ir3_sched_prefer_lower_live(mesa_root: pathlib.Path) -> str:
     p = mesa_root / "src/freedreno/ir3/ir3_sched.c"
