@@ -4,6 +4,13 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo.
 O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e este projeto segue [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+### Added
+- **Modo --strict em scripts/apply_all_patches.py:** Adicionada flag `--strict` que encerra a execução com código 2 caso qualquer patch falhe, além de exibir tabela de resumo estruturada.
+- **Testes de consistência em scripts/verify_patch_stack.py:** Adicionada validação de sincronia de lista de patches, variantes no workflow/README e verificação de origem de opções de driconf.
+
+### Changed
+- **README sincronizado:** Atualizada seção de variantes para 4 variantes com números verificados de GMEM (528 KB para Sustained/MaxPerf, 656 KB para BigGMEM/Switch2) e frações CCU exatas.
+- **CI estrito:** `.github/workflows/build-turnip.yml` executa `apply_all_patches.py` com `--strict` e descrições de GMEM sincronizadas.
 
 ## [0.2.6] - 2026-11-06
 ### Fixed

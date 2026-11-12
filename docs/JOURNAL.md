@@ -85,3 +85,10 @@
   2. *Patch 64 (`patches/64-tu-depth-blit-features.py`):* Adiciona anúncio explícito de `VK_FORMAT_FEATURE_2_BLIT_SRC_BIT` e `VK_FORMAT_FEATURE_2_BLIT_DST_BIT` para formatos de profundidade (`VK_FORMAT_D32_SFLOAT`, `VK_FORMAT_D24_UNORM_S8_UINT`, `VK_FORMAT_D16_UNORM`) em `src/freedreno/vulkan/tu_formats.cc`.
   3. *Driconf Switch Universal (`scripts/apply_all_patches.py`):* Perfis duplos (`application_name_match` e `executable_regexp`) cobrindo Nyushu (`com.antutu.benchmark.full`), Eden Nepo (`dev.eden.*`, `nepotira/eden-android-optimizations`), Citron, Yuzu, Sudachi, Suyu, Ryujinx e Uzuy.
 - **Verificação:** `python3 scripts/verify_patch_stack.py` aprovado (18 patches Git, 14 patches Python). Aplicação do patch 64 e driconf testada com sucesso em `.scratch/mesa-src`.
+
+## [2026-11-12] - Implementação do Modo Estrito e Auditoria em Mesa Real (chore/11-strict-mode-and-audit)
+- Implementada opção `--strict` em `scripts/apply_all_patches.py` e tabela de resumo, retornando código 2 em caso de falha.
+- No PASSO 2, as 4 variantes apresentaram 2 FAILs cada (`kgsl-syncobj-merge-ts-fd.patch` e `59-a8xx-ir3-coalesce-ubo-push-ranges.py`), com código de saída 2.
+- No PASSO 3, comprovou-se que as 5 opções de driconf e as extensões do patch 57 já existem no upstream do Mesa.
+- Sincronizados `README.md` e `.github/workflows/build-turnip.yml` com as 4 variantes e os valores matemáticos de GMEM (528 KB / 656 KB).
+- Workflow CI atualizado para rodar o orquestrador com `--strict`, e documentada auditoria em `docs/AUDITORIA_MESA_REAL.md`.
